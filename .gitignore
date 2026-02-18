@@ -59,3 +59,6 @@ coverage.xml
 
 # Static files (built frontend served by backend)
 static/
+
+# Chat logs
+chats/
