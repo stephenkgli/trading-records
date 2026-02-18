@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -36,9 +38,9 @@ class TradeGroupResponse(BaseModel):
     direction: str
     strategy_tag: str | None = None
     status: str
-    realized_pnl: str | None = None
-    opened_at: str
-    closed_at: str | None = None
+    realized_pnl: Decimal | None = None
+    opened_at: datetime
+    closed_at: datetime | None = None
     notes: str | None = None
 
 
@@ -117,9 +119,9 @@ def get_group(group_id: uuid.UUID, db: Session = Depends(get_db)):
         direction=group.direction,
         strategy_tag=group.strategy_tag,
         status=group.status,
-        realized_pnl=str(group.realized_pnl) if group.realized_pnl is not None else None,
-        opened_at=group.opened_at.isoformat(),
-        closed_at=group.closed_at.isoformat() if group.closed_at else None,
+        realized_pnl=group.realized_pnl,
+        opened_at=group.opened_at,
+        closed_at=group.closed_at,
         notes=group.notes,
         legs=[TradeGroupLegResponse.model_validate(leg) for leg in group.legs],
     )

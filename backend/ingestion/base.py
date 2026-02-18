@@ -120,6 +120,9 @@ class BaseIngester:
                     import_log.completed_at = datetime.now(timezone.utc)
                     db.add(import_log)
 
+                if import_log.status in ("success", "partial") and new_trades:
+                    self._run_post_import_hooks(db, new_trades)
+
                 logger.info(
                     "import_completed",
                     source=self.source,
@@ -165,6 +168,46 @@ class BaseIngester:
             records_failed=import_log.records_failed,
             errors=validation.errors,
         )
+
+    def _run_post_import_hooks(
+        self, db: Session, imported_trades: Sequence[NormalizedTrade]
+    ) -> None:
+        """Run post-import refresh and grouping hooks.
+
+        Hooks are best-effort; failures are logged but do not fail the import.
+        """
+        if not imported_trades:
+            return
+
+        hook_tx = db.begin_nested() if db.in_transaction() else db.begin()
+        with hook_tx:
+            # Refresh materialized view only for PostgreSQL deployments.
+            bind = db.get_bind()
+            if bind and bind.dialect.name == "postgresql":
+                try:
+                    from backend.services.analytics import refresh_daily_summaries
+
+                    refresh_daily_summaries(db=db)
+                except Exception as exc:
+                    logger.warning(
+                        "post_import_refresh_failed",
+                        source=self.source,
+                        error=str(exc),
+                    )
+
+            # Recompute groups for affected (account, symbol) scopes.
+            try:
+                from backend.services.trade_grouper import recompute_groups
+
+                affected_pairs = {(t.account_id, t.symbol) for t in imported_trades}
+                for account_id, symbol in affected_pairs:
+                    recompute_groups(db=db, symbol=symbol, account_id=account_id)
+            except Exception as exc:
+                logger.warning(
+                    "post_import_group_recompute_failed",
+                    source=self.source,
+                    error=str(exc),
+                )
 
     def _deduplicate(
         self,

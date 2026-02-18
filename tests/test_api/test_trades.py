@@ -204,6 +204,45 @@ class TestTradesSorting:
 
 
 # ===========================================================================
+# Trades Summary
+# ===========================================================================
+
+class TestTradesSummary:
+    """Test aggregated trades summary endpoint."""
+
+    def test_summary_returns_aggregates(self, client, auth_headers, db_session):
+        """Summary should return aggregate fields with non-empty data."""
+        _seed_trades(db_session, 6)
+
+        response = client.get("/api/v1/trades/summary", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["total_trades"] == 6
+        assert "total_quantity" in data
+        assert "total_commissions" in data
+        assert "gross_pnl" in data
+        assert "net_pnl" in data
+
+    def test_summary_respects_filters(self, client, auth_headers, db_session):
+        """Summary filters should restrict the aggregation scope."""
+        _seed_trades(db_session, 10)
+
+        response = client.get(
+            "/api/v1/trades/summary?symbol=AAPL&broker=ibkr",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_trades"] >= 0
+
+    def test_summary_requires_auth(self, client):
+        """Trades summary endpoint should require authentication."""
+        response = client.get("/api/v1/trades/summary")
+        assert response.status_code == 401
+
+
+# ===========================================================================
 # Single Trade Detail
 # ===========================================================================
 

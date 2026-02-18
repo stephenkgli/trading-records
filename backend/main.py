@@ -67,12 +67,14 @@ from backend.api.trades import router as trades_router  # noqa: E402
 from backend.api.imports import router as imports_router  # noqa: E402
 from backend.api.groups import router as groups_router  # noqa: E402
 from backend.api.analytics import router as analytics_router  # noqa: E402
+from backend.api.config import router as config_router  # noqa: E402
 
 app.include_router(health_router)
 app.include_router(trades_router)
 app.include_router(imports_router)
 app.include_router(groups_router)
 app.include_router(analytics_router)
+app.include_router(config_router)
 
 # Serve frontend static files (built React app)
 static_dir = Path(__file__).parent.parent / "static"

@@ -88,6 +88,13 @@ export async function fetchTrades(filters: TradeFilters = {}): Promise<TradeList
   return handleResponse(response);
 }
 
+export async function fetchTradeDetail(id: string): Promise<Trade> {
+  const response = await fetch(`${API_BASE}/trades/${id}`, {
+    headers: getHeaders(),
+  });
+  return handleResponse(response);
+}
+
 // Import
 export interface ImportResult {
   import_log_id: string;

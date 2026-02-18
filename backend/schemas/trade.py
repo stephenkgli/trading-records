@@ -68,3 +68,13 @@ class TradeListResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+class TradeSummaryResponse(BaseModel):
+    """Aggregated trade statistics for a filtered scope."""
+
+    total_trades: int
+    total_quantity: Decimal
+    total_commissions: Decimal
+    gross_pnl: Decimal
+    net_pnl: Decimal

@@ -98,6 +98,39 @@ class TestFlexTrigger:
 
 
 # ===========================================================================
+# Tradovate Trigger
+# ===========================================================================
+
+class TestTradovateTrigger:
+    """Test manual Tradovate trigger endpoint."""
+
+    @patch("backend.ingestion.tradovate.TradovateIngester")
+    def test_trigger_tradovate(self, mock_ingester_cls, client, auth_headers):
+        """POST /api/v1/import/tradovate/trigger should trigger an import."""
+        mock_result = ImportResult(
+            import_log_id=uuid.uuid4(),
+            source="tradovate_api",
+            status="success",
+            records_total=3,
+            records_imported=3,
+            records_skipped_dup=0,
+            records_failed=0,
+        )
+        mock_ingester_cls.return_value.fetch_and_import.return_value = mock_result
+
+        response = client.post("/api/v1/import/tradovate/trigger", headers=auth_headers)
+        assert response.status_code in (200, 201, 202)
+        data = response.json()
+        assert data["source"] == "tradovate_api"
+        assert data["records_imported"] == 3
+
+    def test_tradovate_trigger_requires_auth(self, client):
+        """Tradovate trigger should require authentication."""
+        response = client.post("/api/v1/import/tradovate/trigger")
+        assert response.status_code == 401
+
+
+# ===========================================================================
 # Import Logs
 # ===========================================================================
 

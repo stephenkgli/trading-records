@@ -16,7 +16,11 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
+from backend.database import Base
 from backend.ingestion.base import BaseIngester
 from backend.models.trade import Trade
 from backend.models.import_log import ImportLog
@@ -242,3 +246,44 @@ class TestImportResultFields:
         trade = db_session.query(Trade).filter_by(broker_exec_id="LINK001").first()
         assert trade is not None
         assert str(trade.import_log_id) == str(result.import_log_id)
+
+
+class TestTransactionRollback:
+    """Test all-or-nothing import transaction behavior."""
+
+    def test_insert_failure_rolls_back_all_trades(self, make_normalized_trade):
+        """If one row fails at insert time, no trades from the batch should persist."""
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        Base.metadata.create_all(bind=engine)
+        db_session = Session(bind=engine)
+
+        trades = [
+            make_normalized_trade(broker_exec_id="RB001", raw_data={"ok": True}),
+            # set() is not JSON-serializable and should fail DB bind/flush
+            make_normalized_trade(broker_exec_id="RB002", raw_data={"bad": {1, 2}}),
+        ]
+
+        ingester = _TestIngester()
+        with pytest.raises(Exception):
+            ingester.import_records(trades, db=db_session)
+
+        db_session.rollback()
+        persisted = (
+            db_session.query(Trade)
+            .filter(Trade.broker_exec_id.in_(["RB001", "RB002"]))
+            .count()
+        )
+        assert persisted == 0
+        db_session.close()
+        engine.dispose()

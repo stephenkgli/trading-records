@@ -6,12 +6,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models.trade import Trade
-from backend.schemas.trade import TradeListResponse, TradeResponse
+from backend.schemas.trade import TradeListResponse, TradeResponse, TradeSummaryResponse
 
 router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
 
@@ -72,6 +72,51 @@ def list_trades(
         per_page=per_page,
         pages=pages,
     )
+
+
+@router.get("/summary", response_model=TradeSummaryResponse)
+def trades_summary(
+    account_id: str | None = Query(None),
+    broker: str | None = Query(None),
+    symbol: str | None = Query(None),
+    asset_class: str | None = Query(None),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
+    db: Session = Depends(get_db),
+):
+    """Get aggregated trade statistics for the filtered scope."""
+    pnl_expr = case(
+        (Trade.side == "sell", Trade.price * Trade.quantity),
+        (Trade.side == "buy", -Trade.price * Trade.quantity),
+        else_=0,
+    )
+
+    query = select(
+        func.count(Trade.id).label("total_trades"),
+        func.coalesce(func.sum(Trade.quantity), 0).label("total_quantity"),
+        func.coalesce(func.sum(func.abs(Trade.commission)), 0).label("total_commissions"),
+        func.coalesce(func.sum(pnl_expr), 0).label("gross_pnl"),
+        (
+            func.coalesce(func.sum(pnl_expr), 0)
+            - func.coalesce(func.sum(func.abs(Trade.commission)), 0)
+        ).label("net_pnl"),
+    )
+
+    if account_id:
+        query = query.where(Trade.account_id == account_id)
+    if broker:
+        query = query.where(Trade.broker == broker)
+    if symbol:
+        query = query.where(Trade.symbol == symbol)
+    if asset_class:
+        query = query.where(Trade.asset_class == asset_class)
+    if from_date:
+        query = query.where(Trade.executed_at >= from_date)
+    if to_date:
+        query = query.where(Trade.executed_at <= to_date)
+
+    row = db.execute(query).mappings().one()
+    return TradeSummaryResponse(**dict(row))
 
 
 @router.get("/{trade_id}", response_model=TradeResponse)
