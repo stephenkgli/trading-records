@@ -129,8 +129,8 @@ def _compute_daily_summaries_from_trades(
             END) - SUM(ABS(t.commission)) AS net_pnl,
             SUM(ABS(t.commission)) AS commissions,
             COUNT(*) AS trade_count,
-            SUM(CASE WHEN t.side = 'sell' AND t.price * t.quantity > 0 THEN 1 ELSE 0 END) AS win_count,
-            SUM(CASE WHEN t.side = 'sell' AND t.price * t.quantity <= 0 THEN 1 ELSE 0 END) AS loss_count
+            0 AS win_count,
+            0 AS loss_count
         FROM trades t
         WHERE 1=1
     """
@@ -185,9 +185,19 @@ def get_by_symbol(
                 WHEN t.side = 'buy' THEN -t.price * t.quantity
             END) - SUM(ABS(t.commission)) AS net_pnl,
             COUNT(*) AS trade_count,
-            COUNT(*) FILTER (WHERE t.side = 'sell' AND t.price * t.quantity > 0) AS win_count,
-            COUNT(*) FILTER (WHERE t.side = 'sell' AND t.price * t.quantity <= 0) AS loss_count
+            COALESCE(g.win_count, 0) AS win_count,
+            COALESCE(g.loss_count, 0) AS loss_count
         FROM trades t
+        LEFT JOIN (
+            SELECT
+                tg.symbol,
+                tg.account_id,
+                SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END) AS win_count,
+                SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
+            FROM trade_groups tg
+            WHERE tg.status = 'closed'
+            GROUP BY tg.symbol, tg.account_id
+        ) g ON g.symbol = t.symbol AND g.account_id = t.account_id
         WHERE 1=1
     """
     params: dict = {}
@@ -238,6 +248,47 @@ def get_by_strategy(
     return [dict(row) for row in rows]
 
 
+def _get_win_loss_from_groups(
+    db: Session,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    account_id: str | None = None,
+) -> dict:
+    """从 trade_groups 表获取 win/loss count（基于已关闭 round-trip 的 realized_pnl）。"""
+    query = """
+        SELECT
+            COALESCE(SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END), 0) AS win_count,
+            COALESCE(SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END), 0) AS loss_count
+        FROM trade_groups tg
+        WHERE tg.status = 'closed'
+    """
+    params: dict = {}
+
+    if from_date:
+        query += " AND DATE(tg.closed_at) >= :from_date"
+        params["from_date"] = from_date
+    if to_date:
+        query += " AND DATE(tg.closed_at) <= :to_date"
+        params["to_date"] = to_date
+    if account_id:
+        query += " AND tg.account_id = :account_id"
+        params["account_id"] = account_id
+
+    params = _sqlite_safe_params(db, params)
+
+    try:
+        row = db.execute(text(query), params).mappings().first()
+        if row:
+            return {
+                "win_count": int(row["win_count"]),
+                "loss_count": int(row["loss_count"]),
+            }
+    except Exception:
+        logger.warning("trade_groups_win_loss_query_failed")
+
+    return {"win_count": 0, "loss_count": 0}
+
+
 def get_performance_metrics(
     db: Session,
     from_date: date | None = None,
@@ -269,9 +320,14 @@ def get_performance_metrics(
     total_commissions = sum(Decimal(str(r["commissions"] or 0)) for r in rows)
     net_pnl = total_pnl - total_commissions
     total_trades = sum(int(r["trade_count"] or 0) for r in rows)
-    win_count = sum(int(r["win_count"] or 0) for r in rows)
-    loss_count = sum(int(r["loss_count"] or 0) for r in rows)
     trading_days = len(rows)
+
+    # 从 trade_groups 表获取正确的 win/loss count（基于已关闭的 round-trip 盈亏）
+    wl = _get_win_loss_from_groups(
+        db, from_date=from_date, to_date=to_date, account_id=account_id
+    )
+    win_count = wl["win_count"]
+    loss_count = wl["loss_count"]
 
     total_decided = win_count + loss_count
     win_rate = (win_count / total_decided * 100) if total_decided > 0 else 0.0

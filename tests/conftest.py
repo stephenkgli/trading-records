@@ -237,6 +237,12 @@ def tradovate_export_csv() -> str:
     return (FIXTURES_DIR / "tradovate_export.csv").read_text()
 
 
+@pytest.fixture
+def tradovate_performance_csv() -> str:
+    """Load the Tradovate Performance report CSV fixture."""
+    return (FIXTURES_DIR / "tradovate_performance.csv").read_text()
+
+
 # ---------------------------------------------------------------------------
 # NormalizedTrade factory
 # ---------------------------------------------------------------------------

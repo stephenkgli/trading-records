@@ -39,6 +39,7 @@ class CSVFormat:
 
     IBKR = "ibkr"
     TRADOVATE = "tradovate"
+    TRADOVATE_PERF = "tradovate_perf"
     UNKNOWN = "unknown"
 
 
@@ -77,6 +78,8 @@ class CSVImporter(BaseIngester):
             trades = self._parse_ibkr_csv(text, filename)
         elif fmt == CSVFormat.TRADOVATE:
             trades = self._parse_tradovate_csv(text, filename)
+        elif fmt == CSVFormat.TRADOVATE_PERF:
+            trades = self._parse_tradovate_performance_csv(text, filename)
         else:
             raise ValueError(
                 f"Unknown CSV format for file '{filename}'. "
@@ -108,6 +111,11 @@ class CSVImporter(BaseIngester):
                 return CSVFormat.TRADOVATE
             if "orderid" in line_lower and "b/s" in line_lower:
                 return CSVFormat.TRADOVATE
+            # Tradovate Performance report has buyFillId/sellFillId or buyPrice/sellPrice
+            if "buyfillid" in line_lower and "sellfillid" in line_lower:
+                return CSVFormat.TRADOVATE_PERF
+            if "buyprice" in line_lower and "sellprice" in line_lower and "boughttimestamp" in line_lower:
+                return CSVFormat.TRADOVATE_PERF
 
         # Try to detect from column headers
         reader = csv.reader(io.StringIO(text))
@@ -117,6 +125,10 @@ class CSVImporter(BaseIngester):
                 return CSVFormat.IBKR
             if "execid" in header_str or "contractname" in header_str:
                 return CSVFormat.TRADOVATE
+            if "buyfillid" in header_str and "sellfillid" in header_str:
+                return CSVFormat.TRADOVATE_PERF
+            if "buyprice" in header_str and "sellprice" in header_str and "boughttimestamp" in header_str:
+                return CSVFormat.TRADOVATE_PERF
             break  # Only check first row
 
         return CSVFormat.UNKNOWN
@@ -389,6 +401,125 @@ class CSVImporter(BaseIngester):
             currency="USD",
             raw_data=record,
         )
+
+    def _parse_tradovate_performance_csv(
+        self, text: str, filename: str
+    ) -> list[NormalizedTrade]:
+        """Parse Tradovate Performance report CSV export.
+
+        Tradovate Performance CSVs contain paired trades with columns like:
+        symbol, _priceFormat, _priceFormatType, _tickSize, buyFillId, sellFillId,
+        qty, buyPrice, sellPrice, pnl, boughtTimestamp, soldTimestamp, duration
+
+        Each row represents a completed round-trip trade. We split it into
+        two NormalizedTrade records (buy + sell).
+        """
+        trades: list[NormalizedTrade] = []
+
+        reader = csv.DictReader(io.StringIO(text))
+        row_number = 0
+
+        for row in reader:
+            row_number += 1
+            try:
+                pair = self._normalize_tradovate_perf_row(row, filename, row_number)
+                trades.extend(pair)
+            except Exception as e:
+                logger.warning(
+                    "tradovate_perf_csv_parse_error",
+                    filename=filename,
+                    row=row_number,
+                    error=str(e),
+                )
+
+        logger.info(
+            "tradovate_perf_csv_parsed", filename=filename, trade_count=len(trades)
+        )
+        return trades
+
+    def _normalize_tradovate_perf_row(
+        self, record: dict, filename: str, row_number: int
+    ) -> list[NormalizedTrade]:
+        """Normalize a single Tradovate Performance CSV row into buy + sell trades."""
+        # 去除 header key 的空白
+        record = {k.strip(): v.strip() if isinstance(v, str) else v for k, v in record.items()}
+
+        symbol = safe_str(record.get("symbol", ""))
+        if not symbol:
+            return []
+
+        qty = abs(safe_decimal(record.get("qty", "0")))
+        if qty == 0:
+            return []
+
+        buy_price = safe_decimal(record.get("buyPrice", "0"))
+        sell_price = safe_decimal(record.get("sellPrice", "0"))
+
+        bought_ts = safe_str(record.get("boughtTimestamp", ""))
+        sold_ts = safe_str(record.get("soldTimestamp", ""))
+
+        buy_fill_id = safe_str(record.get("buyFillId", ""))
+        sell_fill_id = safe_str(record.get("sellFillId", ""))
+
+        results: list[NormalizedTrade] = []
+
+        # 解析买入时间
+        buy_dt = self._parse_tradovate_csv_datetime(bought_ts)
+        if buy_dt:
+            # 使用 fillId + row_number 避免同一 fillId 出现在多行时重复
+            if buy_fill_id:
+                buy_exec_id = f"{buy_fill_id}_r{row_number}_buy"
+            else:
+                buy_exec_id = hashlib.sha256(
+                    f"{filename}|{row_number}|{symbol}|buy|{qty}|{buy_price}|{bought_ts}".encode()
+                ).hexdigest()
+            results.append(NormalizedTrade(
+                broker="tradovate",
+                broker_exec_id=buy_exec_id,
+                account_id="",
+                symbol=symbol,
+                underlying=None,
+                asset_class="future",
+                side="buy",
+                quantity=qty,
+                price=buy_price,
+                commission=Decimal("0"),
+                executed_at=buy_dt,
+                order_id=None,
+                exchange="TRADOVATE",
+                currency="USD",
+                raw_data=record,
+            ))
+
+        # 解析卖出时间
+        sell_dt = self._parse_tradovate_csv_datetime(sold_ts)
+        if sell_dt:
+            # 使用 fillId + row_number 避免同一 fillId 出现在多行时重复
+            if sell_fill_id:
+                sell_exec_id = f"{sell_fill_id}_r{row_number}_sell"
+            else:
+                sell_exec_id = hashlib.sha256(
+                    f"{filename}|{row_number}|{symbol}|sell|{qty}|{sell_price}|{sold_ts}".encode()
+                ).hexdigest()
+            results.append(NormalizedTrade(
+                broker="tradovate",
+                broker_exec_id=sell_exec_id,
+                account_id="",
+                symbol=symbol,
+                underlying=None,
+                asset_class="future",
+                side="sell",
+                quantity=qty,
+                price=sell_price,
+                commission=Decimal("0"),
+                executed_at=sell_dt,
+                order_id=None,
+                exchange="TRADOVATE",
+                currency="USD",
+                raw_data=record,
+            ))
+
+        return results
 
     @staticmethod
     def _parse_tradovate_csv_datetime(dt_str: str) -> datetime | None:

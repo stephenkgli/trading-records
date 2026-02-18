@@ -69,7 +69,8 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
               : "Drag and drop a CSV file here, or click to browse"}
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Supports IBKR Activity Statement CSV and Tradovate CSV exports
+            Supports IBKR Activity Statement CSV, Tradovate CSV exports, and
+            Tradovate Performance reports
           </p>
         </label>
       </div>
