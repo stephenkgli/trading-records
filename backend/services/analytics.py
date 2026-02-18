@@ -254,11 +254,13 @@ def _get_win_loss_from_groups(
     to_date: date | None = None,
     account_id: str | None = None,
 ) -> dict:
-    """从 trade_groups 表获取 win/loss count（基于已关闭 round-trip 的 realized_pnl）。"""
+    """从 trade_groups 表获取 win/loss count 及 avg_win/avg_loss（基于已关闭 round-trip 的 realized_pnl）。"""
     query = """
         SELECT
             COALESCE(SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END), 0) AS win_count,
-            COALESCE(SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END), 0) AS loss_count
+            COALESCE(SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END), 0) AS loss_count,
+            COALESCE(AVG(CASE WHEN tg.realized_pnl > 0 THEN tg.realized_pnl END), 0) AS avg_win,
+            COALESCE(AVG(CASE WHEN tg.realized_pnl < 0 THEN tg.realized_pnl END), 0) AS avg_loss
         FROM trade_groups tg
         WHERE tg.status = 'closed'
     """
@@ -282,11 +284,13 @@ def _get_win_loss_from_groups(
             return {
                 "win_count": int(row["win_count"]),
                 "loss_count": int(row["loss_count"]),
+                "avg_win": Decimal(str(row["avg_win"])),
+                "avg_loss": Decimal(str(row["avg_loss"])),
             }
     except Exception:
         logger.warning("trade_groups_win_loss_query_failed")
 
-    return {"win_count": 0, "loss_count": 0}
+    return {"win_count": 0, "loss_count": 0, "avg_win": Decimal("0"), "avg_loss": Decimal("0")}
 
 
 def get_performance_metrics(
@@ -322,26 +326,22 @@ def get_performance_metrics(
     total_trades = sum(int(r["trade_count"] or 0) for r in rows)
     trading_days = len(rows)
 
-    # 从 trade_groups 表获取正确的 win/loss count（基于已关闭的 round-trip 盈亏）
+    # 从 trade_groups 表获取正确的 win/loss count 和 avg_win/avg_loss
+    # （基于已关闭的 round-trip realized_pnl，而非日汇总数据）
     wl = _get_win_loss_from_groups(
         db, from_date=from_date, to_date=to_date, account_id=account_id
     )
     win_count = wl["win_count"]
     loss_count = wl["loss_count"]
+    avg_win = wl["avg_win"]
+    avg_loss = wl["avg_loss"]
 
     total_decided = win_count + loss_count
     win_rate = (win_count / total_decided * 100) if total_decided > 0 else 0.0
 
-    # Avg win/loss from daily data
-    winning_days = [Decimal(str(r["net_pnl"] or 0)) for r in rows if (r["net_pnl"] or 0) > 0]
-    losing_days = [Decimal(str(r["net_pnl"] or 0)) for r in rows if (r["net_pnl"] or 0) < 0]
-
-    avg_win = sum(winning_days) / len(winning_days) if winning_days else Decimal("0")
-    avg_loss = sum(losing_days) / len(losing_days) if losing_days else Decimal("0")
-
-    # Profit factor
-    gross_wins = sum(winning_days)
-    gross_losses = abs(sum(losing_days))
+    # Profit factor: 总盈利 / 总亏损（基于每笔交易，而非日汇总）
+    gross_wins = avg_win * win_count
+    gross_losses = abs(avg_loss * loss_count)
     profit_factor = float(gross_wins / gross_losses) if gross_losses > 0 else None
 
     # Expectancy
