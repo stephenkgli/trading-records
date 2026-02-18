@@ -175,6 +175,10 @@ class BaseIngester:
     ) -> None:
         """Run post-import refresh and grouping hooks.
 
+        Order matters: recompute groups FIRST (so trade_groups.realized_pnl
+        is up-to-date), THEN refresh the materialized view which reads from
+        trade_groups.
+
         Hooks are best-effort; failures are logged but do not fail the import.
         """
         if not imported_trades:
@@ -182,21 +186,7 @@ class BaseIngester:
 
         hook_tx = db.begin_nested() if db.in_transaction() else db.begin()
         with hook_tx:
-            # Refresh materialized view only for PostgreSQL deployments.
-            bind = db.get_bind()
-            if bind and bind.dialect.name == "postgresql":
-                try:
-                    from backend.services.analytics import refresh_daily_summaries
-
-                    refresh_daily_summaries(db=db)
-                except Exception as exc:
-                    logger.warning(
-                        "post_import_refresh_failed",
-                        source=self.source,
-                        error=str(exc),
-                    )
-
-            # Recompute groups for affected (account, symbol) scopes.
+            # 1. Recompute groups FIRST — daily_summaries view reads from trade_groups.
             try:
                 from backend.services.trade_grouper import recompute_groups
 
@@ -209,6 +199,20 @@ class BaseIngester:
                     source=self.source,
                     error=str(exc),
                 )
+
+            # 2. Refresh materialized view AFTER groups are recomputed.
+            bind = db.get_bind()
+            if bind and bind.dialect.name == "postgresql":
+                try:
+                    from backend.services.analytics import refresh_daily_summaries
+
+                    refresh_daily_summaries(db=db)
+                except Exception as exc:
+                    logger.warning(
+                        "post_import_refresh_failed",
+                        source=self.source,
+                        error=str(exc),
+                    )
 
     def _deduplicate(
         self,

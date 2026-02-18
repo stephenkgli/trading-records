@@ -112,41 +112,56 @@ def _compute_daily_summaries_from_trades(
     to_date: date | None = None,
     account_id: str | None = None,
 ) -> list[dict]:
-    """Compute daily summaries directly from trades for test/dev databases."""
+    """Compute daily summaries from trade_groups (realized_pnl) for test/dev databases.
+
+    P&L is based on closed round-trip realized_pnl from trade_groups, not raw
+    buy/sell amounts.  Commissions come from trades linked via trade_group_legs.
+    """
     query = """
         SELECT
-            DATE(t.executed_at) AS date,
-            t.account_id AS account_id,
-            SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
-                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
-                ELSE 0
-            END) AS gross_pnl,
-            SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
-                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
-                ELSE 0
-            END) - SUM(ABS(t.commission)) AS net_pnl,
-            SUM(ABS(t.commission)) AS commissions,
-            COUNT(*) AS trade_count,
-            0 AS win_count,
-            0 AS loss_count
-        FROM trades t
+            COALESCE(g_agg.date, t_agg.date) AS date,
+            COALESCE(g_agg.account_id, t_agg.account_id) AS account_id,
+            COALESCE(g_agg.gross_pnl, 0) AS gross_pnl,
+            COALESCE(g_agg.gross_pnl, 0) - COALESCE(t_agg.commissions, 0) AS net_pnl,
+            COALESCE(t_agg.commissions, 0) AS commissions,
+            COALESCE(t_agg.trade_count, 0) AS trade_count,
+            COALESCE(g_agg.win_count, 0) AS win_count,
+            COALESCE(g_agg.loss_count, 0) AS loss_count
+        FROM (
+            SELECT
+                DATE(tg.closed_at) AS date,
+                tg.account_id,
+                SUM(tg.realized_pnl) AS gross_pnl,
+                SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END) AS win_count,
+                SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
+            FROM trade_groups tg
+            WHERE tg.status = 'closed'
+            GROUP BY DATE(tg.closed_at), tg.account_id
+        ) g_agg
+        FULL OUTER JOIN (
+            SELECT
+                DATE(t.executed_at) AS date,
+                t.account_id,
+                SUM(ABS(t.commission)) AS commissions,
+                COUNT(*) AS trade_count
+            FROM trades t
+            GROUP BY DATE(t.executed_at), t.account_id
+        ) t_agg ON g_agg.date = t_agg.date AND g_agg.account_id = t_agg.account_id
         WHERE 1=1
     """
     params: dict = {}
 
     if from_date:
-        query += " AND DATE(t.executed_at) >= :from_date"
+        query += " AND COALESCE(g_agg.date, t_agg.date) >= :from_date"
         params["from_date"] = from_date
     if to_date:
-        query += " AND DATE(t.executed_at) <= :to_date"
+        query += " AND COALESCE(g_agg.date, t_agg.date) <= :to_date"
         params["to_date"] = to_date
     if account_id:
-        query += " AND t.account_id = :account_id"
+        query += " AND COALESCE(g_agg.account_id, t_agg.account_id) = :account_id"
         params["account_id"] = account_id
 
-    query += " GROUP BY DATE(t.executed_at), t.account_id ORDER BY date ASC"
+    query += " ORDER BY date ASC"
     params = _sqlite_safe_params(db, params)
     rows = db.execute(text(query), params).mappings().all()
     return [dict(row) for row in rows]
@@ -176,43 +191,44 @@ def get_by_symbol(
     to_date: date | None = None,
     account_id: str | None = None,
 ) -> list[dict]:
-    """Get P&L breakdown by symbol."""
+    """Get P&L breakdown by symbol using trade_groups realized_pnl."""
     query = """
         SELECT
-            t.symbol,
-            SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
-                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
-            END) - SUM(ABS(t.commission)) AS net_pnl,
-            COUNT(*) AS trade_count,
-            COALESCE(g.win_count, 0) AS win_count,
-            COALESCE(g.loss_count, 0) AS loss_count
-        FROM trades t
+            tg.symbol,
+            COALESCE(SUM(tg.realized_pnl), 0) AS net_pnl,
+            COALESCE(trade_counts.cnt, 0) AS trade_count,
+            SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END) AS win_count,
+            SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
+        FROM trade_groups tg
         LEFT JOIN (
-            SELECT
-                tg.symbol,
-                tg.account_id,
-                SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END) AS win_count,
-                SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
-            FROM trade_groups tg
-            WHERE tg.status = 'closed'
-            GROUP BY tg.symbol, tg.account_id
-        ) g ON g.symbol = t.symbol AND g.account_id = t.account_id
-        WHERE 1=1
+            SELECT t.symbol, t.account_id, COUNT(*) AS cnt
+            FROM trades t
+            WHERE 1=1
     """
     params: dict = {}
+    trade_filter = ""
 
     if from_date:
-        query += " AND t.executed_at >= :from_date"
+        trade_filter += " AND t.executed_at >= :from_date"
         params["from_date"] = datetime.combine(from_date, datetime.min.time())
     if to_date:
-        query += " AND t.executed_at < :to_date"
+        trade_filter += " AND t.executed_at < :to_date"
         params["to_date"] = datetime.combine(to_date, datetime.min.time())
     if account_id:
-        query += " AND t.account_id = :account_id"
+        trade_filter += " AND t.account_id = :account_id"
         params["account_id"] = account_id
 
-    query += " GROUP BY t.symbol ORDER BY net_pnl DESC"
+    query += trade_filter
+    query += """
+            GROUP BY t.symbol, t.account_id
+        ) trade_counts ON trade_counts.symbol = tg.symbol AND trade_counts.account_id = tg.account_id
+        WHERE tg.status = 'closed'
+    """
+
+    if account_id:
+        query += " AND tg.account_id = :account_id"
+
+    query += " GROUP BY tg.symbol, trade_counts.cnt ORDER BY net_pnl DESC"
     params = _sqlite_safe_params(db, params)
 
     rows = db.execute(text(query), params).mappings().all()
@@ -299,35 +315,12 @@ def get_performance_metrics(
     to_date: date | None = None,
     account_id: str | None = None,
 ) -> dict:
-    """Compute overall performance metrics."""
-    rows = _get_daily_summaries_from_view_or_trades(
-        db, from_date=from_date, to_date=to_date, account_id=account_id
-    )
+    """Compute overall performance metrics.
 
-    if not rows:
-        return {
-            "total_pnl": Decimal("0"),
-            "total_commissions": Decimal("0"),
-            "net_pnl": Decimal("0"),
-            "total_trades": 0,
-            "win_count": 0,
-            "loss_count": 0,
-            "win_rate": 0.0,
-            "avg_win": Decimal("0"),
-            "avg_loss": Decimal("0"),
-            "profit_factor": None,
-            "expectancy": Decimal("0"),
-            "trading_days": 0,
-        }
-
-    total_pnl = sum(Decimal(str(r["gross_pnl"] or 0)) for r in rows)
-    total_commissions = sum(Decimal(str(r["commissions"] or 0)) for r in rows)
-    net_pnl = total_pnl - total_commissions
-    total_trades = sum(int(r["trade_count"] or 0) for r in rows)
-    trading_days = len(rows)
-
+    P&L is derived from trade_groups.realized_pnl (closed round-trips),
+    not from raw buy/sell amounts.
+    """
     # 从 trade_groups 表获取正确的 win/loss count 和 avg_win/avg_loss
-    # （基于已关闭的 round-trip realized_pnl，而非日汇总数据）
     wl = _get_win_loss_from_groups(
         db, from_date=from_date, to_date=to_date, account_id=account_id
     )
@@ -335,6 +328,57 @@ def get_performance_metrics(
     loss_count = wl["loss_count"]
     avg_win = wl["avg_win"]
     avg_loss = wl["avg_loss"]
+
+    # 从 trade_groups 计算总盈亏
+    pnl_query = """
+        SELECT
+            COALESCE(SUM(tg.realized_pnl), 0) AS total_pnl
+        FROM trade_groups tg
+        WHERE tg.status = 'closed'
+    """
+    pnl_params: dict = {}
+    if from_date:
+        pnl_query += " AND DATE(tg.closed_at) >= :from_date"
+        pnl_params["from_date"] = from_date
+    if to_date:
+        pnl_query += " AND DATE(tg.closed_at) <= :to_date"
+        pnl_params["to_date"] = to_date
+    if account_id:
+        pnl_query += " AND tg.account_id = :account_id"
+        pnl_params["account_id"] = account_id
+
+    pnl_params = _sqlite_safe_params(db, pnl_params)
+    pnl_row = db.execute(text(pnl_query), pnl_params).mappings().first()
+    total_pnl = Decimal(str(pnl_row["total_pnl"])) if pnl_row else Decimal("0")
+
+    # 从 trades 计算佣金和交易数
+    comm_query = """
+        SELECT
+            COALESCE(SUM(ABS(t.commission)), 0) AS total_commissions,
+            COUNT(*) AS total_trades,
+            COUNT(DISTINCT DATE(t.executed_at)) AS trading_days
+        FROM trades t
+        WHERE 1=1
+    """
+    comm_params: dict = {}
+    if from_date:
+        comm_query += " AND DATE(t.executed_at) >= :from_date"
+        comm_params["from_date"] = from_date
+    if to_date:
+        comm_query += " AND DATE(t.executed_at) <= :to_date"
+        comm_params["to_date"] = to_date
+    if account_id:
+        comm_query += " AND t.account_id = :account_id"
+        comm_params["account_id"] = account_id
+
+    comm_params = _sqlite_safe_params(db, comm_params)
+    comm_row = db.execute(text(comm_query), comm_params).mappings().first()
+
+    total_commissions = Decimal(str(comm_row["total_commissions"])) if comm_row else Decimal("0")
+    total_trades = int(comm_row["total_trades"]) if comm_row else 0
+    trading_days = int(comm_row["trading_days"]) if comm_row else 0
+
+    net_pnl = total_pnl - total_commissions
 
     total_decided = win_count + loss_count
     win_rate = (win_count / total_decided * 100) if total_decided > 0 else 0.0

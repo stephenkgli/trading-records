@@ -15,6 +15,7 @@ from backend.database import get_db
 from backend.models.trade_group import TradeGroup, TradeGroupLeg
 from backend.schemas.trade import TradeResponse
 from backend.services.trade_grouper import recompute_groups
+from backend.services.analytics import refresh_daily_summaries
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
@@ -160,4 +161,13 @@ def recompute(
     Deletes existing groups for the scope and rebuilds from scratch.
     """
     result = recompute_groups(db=db, symbol=symbol, account_id=account_id)
+
+    # 刷新 materialized view，使 daily_summaries 反映最新的 trade_groups 数据
+    bind = db.get_bind()
+    if bind and bind.dialect.name == "postgresql":
+        try:
+            refresh_daily_summaries(db=db)
+        except Exception:
+            pass  # 刷新失败不影响 recompute 结果
+
     return RecomputeResponse(**result)

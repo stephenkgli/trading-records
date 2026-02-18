@@ -134,8 +134,8 @@ class TradeService:
             Trade summary statistics.
         """
         pnl_expr = case(
-            (Trade.side == "sell", Trade.price * Trade.quantity),
-            (Trade.side == "buy", -Trade.price * Trade.quantity),
+            (Trade.side == "sell", Trade.price * Trade.quantity * Trade.multiplier),
+            (Trade.side == "buy", -Trade.price * Trade.quantity * Trade.multiplier),
             else_=0,
         )
 
