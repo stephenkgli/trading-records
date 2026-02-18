@@ -1,5 +1,8 @@
 /**
  * Analytics API endpoints.
+ *
+ * Date-range views use the generic `makeDateRangeFetcher` factory.
+ * Calendar keeps an explicit function due to its different parameters.
  */
 
 import { getApiBase, getHeaders, handleResponse } from "./http";
@@ -10,19 +13,27 @@ import type {
   PerformanceMetrics,
 } from "../types";
 
-export async function fetchDailySummaries(
-  from?: string,
-  to?: string
-): Promise<DailySummary[]> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const response = await fetch(`${getApiBase()}/analytics/daily?${params}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
+// -- Generic date-range fetcher factory --
+
+function makeDateRangeFetcher<T>(path: string) {
+  return async (from?: string, to?: string): Promise<T> => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    const url = `${getApiBase()}/analytics/${path}${qs ? `?${qs}` : ""}`;
+    const response = await fetch(url, { headers: getHeaders() });
+    return handleResponse(response);
+  };
 }
 
+// -- Exported fetch functions (same signatures as before) --
+
+export const fetchDailySummaries = makeDateRangeFetcher<DailySummary[]>("daily");
+export const fetchBySymbol = makeDateRangeFetcher<SymbolBreakdown[]>("by-symbol");
+export const fetchPerformance = makeDateRangeFetcher<PerformanceMetrics>("performance");
+
+// Calendar has different params, stays explicit
 export async function fetchCalendar(
   year: number,
   month: number
@@ -30,38 +41,6 @@ export async function fetchCalendar(
   const response = await fetch(
     `${getApiBase()}/analytics/calendar?year=${year}&month=${month}`,
     { headers: getHeaders() }
-  );
-  return handleResponse(response);
-}
-
-export async function fetchBySymbol(
-  from?: string,
-  to?: string
-): Promise<SymbolBreakdown[]> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const response = await fetch(
-    `${getApiBase()}/analytics/by-symbol?${params}`,
-    {
-      headers: getHeaders(),
-    }
-  );
-  return handleResponse(response);
-}
-
-export async function fetchPerformance(
-  from?: string,
-  to?: string
-): Promise<PerformanceMetrics> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const response = await fetch(
-    `${getApiBase()}/analytics/performance?${params}`,
-    {
-      headers: getHeaders(),
-    }
   );
   return handleResponse(response);
 }

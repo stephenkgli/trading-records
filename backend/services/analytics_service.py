@@ -1,106 +1,39 @@
-"""Analytics service — wraps analytics query functions.
+"""Analytics service -- generic analytics query dispatcher.
 
-Provides a service-layer interface for analytics operations so API
-handlers remain thin.  Delegates to the existing analytics module
-functions.
+Provides a single ``execute()`` method that looks up a registered
+:class:`AnalyticsViewDef` and returns validated Pydantic model(s).
 """
 
 from __future__ import annotations
 
-from datetime import date
+from typing import Any
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.schemas.analytics import (
-    CalendarEntry,
-    DailySummary,
-    PerformanceMetrics,
-    StrategyBreakdown,
-    SymbolBreakdown,
-)
-from backend.services.analytics import (
-    get_by_strategy,
-    get_by_symbol,
-    get_calendar_data,
-    get_daily_summaries,
-    get_performance_metrics,
-)
+from backend.services.analytics_registry import AnalyticsViewDef
+
+# Ensure views are registered on import
+import backend.services.analytics_views  # noqa: F401
 
 
 class AnalyticsService:
-    """Service for analytics query operations."""
+    """Generic analytics query dispatcher."""
 
-    def daily_summaries(
+    def execute(
         self,
+        view: AnalyticsViewDef,
         db: Session,
-        *,
-        from_date: date | None = None,
-        to_date: date | None = None,
-        account_id: str | None = None,
-    ) -> list[DailySummary]:
-        """Get daily P&L summaries."""
-        data = get_daily_summaries(
-            db, from_date=from_date, to_date=to_date, account_id=account_id
-        )
-        return [DailySummary(**row) for row in data]
+        **params: Any,
+    ) -> BaseModel | list[BaseModel]:
+        """Execute an analytics view and return validated Pydantic model(s)."""
+        raw = view.query_fn(db, **params)
 
-    def calendar(
-        self,
-        db: Session,
-        *,
-        year: int,
-        month: int,
-        account_id: str | None = None,
-    ) -> list[CalendarEntry]:
-        """Get monthly calendar data for P&L heatmap."""
-        data = get_calendar_data(db, year=year, month=month, account_id=account_id)
-        return [
-            CalendarEntry(
-                date=row["date"],
-                net_pnl=row["net_pnl"] or 0,
-                trade_count=row["trade_count"] or 0,
-            )
-            for row in data
-        ]
+        if view.is_list:
+            if view.row_converter:
+                raw = [view.row_converter(row) for row in raw]
+            return [view.schema(**row) for row in raw]
 
-    def by_symbol(
-        self,
-        db: Session,
-        *,
-        from_date: date | None = None,
-        to_date: date | None = None,
-        account_id: str | None = None,
-    ) -> list[SymbolBreakdown]:
-        """Get per-symbol P&L breakdown."""
-        data = get_by_symbol(
-            db, from_date=from_date, to_date=to_date, account_id=account_id
-        )
-        return [SymbolBreakdown(**row) for row in data]
-
-    def by_strategy(
-        self,
-        db: Session,
-        *,
-        from_date: date | None = None,
-        to_date: date | None = None,
-        account_id: str | None = None,
-    ) -> list[StrategyBreakdown]:
-        """Get per-strategy P&L breakdown."""
-        data = get_by_strategy(
-            db, from_date=from_date, to_date=to_date, account_id=account_id
-        )
-        return [StrategyBreakdown(**row) for row in data]
-
-    def performance(
-        self,
-        db: Session,
-        *,
-        from_date: date | None = None,
-        to_date: date | None = None,
-        account_id: str | None = None,
-    ) -> PerformanceMetrics:
-        """Get overall performance statistics."""
-        data = get_performance_metrics(
-            db, from_date=from_date, to_date=to_date, account_id=account_id
-        )
-        return PerformanceMetrics(**data)
+        if view.row_converter:
+            raw = view.row_converter(raw)
+        return view.schema(**raw)

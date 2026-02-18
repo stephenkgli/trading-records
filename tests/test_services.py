@@ -22,6 +22,7 @@ from sqlalchemy import select
 from backend.models.trade import Trade
 from backend.models.trade_group import TradeGroup
 from backend.services.analytics_service import AnalyticsService
+from backend.services.analytics_registry import get_views
 from backend.services.import_service import ImportService
 from backend.services.trade_service import TradeService
 
@@ -246,51 +247,56 @@ class TestImportServiceLogs:
 # ===========================================================================
 
 class TestAnalyticsServiceDaily:
-    """Test AnalyticsService.daily_summaries."""
+    """Test AnalyticsService.execute for daily view."""
 
     def test_daily_summaries_empty(self, db_session):
         """Empty DB should return empty list."""
         svc = AnalyticsService()
-        result = svc.daily_summaries(db_session)
+        views = get_views()
+        result = svc.execute(views["daily"], db_session)
         assert result == []
 
     def test_daily_summaries_with_data(self, db_session):
         """Should return summaries when trades exist."""
         _seed_trades(db_session, 5)
         svc = AnalyticsService()
-        result = svc.daily_summaries(db_session)
+        views = get_views()
+        result = svc.execute(views["daily"], db_session)
         assert len(result) > 0
 
 
 class TestAnalyticsServiceCalendar:
-    """Test AnalyticsService.calendar."""
+    """Test AnalyticsService.execute for calendar view."""
 
     def test_calendar_empty(self, db_session):
         """Empty month should return empty list."""
         svc = AnalyticsService()
-        result = svc.calendar(db_session, year=2024, month=6)
+        views = get_views()
+        result = svc.execute(views["calendar"], db_session, year=2024, month=6)
         assert result == []
 
 
 class TestAnalyticsServiceBySymbol:
-    """Test AnalyticsService.by_symbol."""
+    """Test AnalyticsService.execute for by-symbol view."""
 
     def test_by_symbol_with_groups(self, db_session):
         """Should return per-symbol breakdown when groups exist."""
         _seed_trades(db_session, 5)
         _seed_groups(db_session)
         svc = AnalyticsService()
-        result = svc.by_symbol(db_session)
+        views = get_views()
+        result = svc.execute(views["by-symbol"], db_session)
         assert len(result) > 0
 
 
 class TestAnalyticsServicePerformance:
-    """Test AnalyticsService.performance."""
+    """Test AnalyticsService.execute for performance view."""
 
     def test_performance_with_data(self, db_session):
         """Should return performance metrics when data exists."""
         _seed_trades(db_session, 5)
         _seed_groups(db_session)
         svc = AnalyticsService()
-        result = svc.performance(db_session)
+        views = get_views()
+        result = svc.execute(views["performance"], db_session)
         assert result.total_trades >= 0
