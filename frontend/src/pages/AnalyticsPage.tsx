@@ -33,7 +33,7 @@ export default function AnalyticsPage() {
             <Stat label="Total Trades" value={String(metrics.total_trades)} />
             <Stat label="Win Rate" value={`${metrics.win_rate}%`}
               color={metrics.win_rate >= 50 ? "green" : "red"} />
-            <Stat label="Profit Factor" value={metrics.profit_factor !== null ? String(metrics.profit_factor) : "N/A"} />
+<Stat label="Win/Loss Ratio" value={metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A"} />
             <Stat label="Avg Win" value={`$${Number(metrics.avg_win).toFixed(2)}`} color="green" />
             <Stat label="Avg Loss" value={`$${Number(metrics.avg_loss).toFixed(2)}`} color="red" />
             <Stat label="Expectancy" value={`$${Number(metrics.expectancy).toFixed(2)}`}

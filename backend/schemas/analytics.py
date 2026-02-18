@@ -60,6 +60,6 @@ class PerformanceMetrics(BaseModel):
     win_rate: float
     avg_win: Decimal
     avg_loss: Decimal
-    profit_factor: float | None = None
+    win_loss_ratio: float | None = None
     expectancy: Decimal
     trading_days: int

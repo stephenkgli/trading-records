@@ -383,10 +383,9 @@ def get_performance_metrics(
     total_decided = win_count + loss_count
     win_rate = (win_count / total_decided * 100) if total_decided > 0 else 0.0
 
-    # Profit factor: 总盈利 / 总亏损（基于每笔交易，而非日汇总）
-    gross_wins = avg_win * win_count
-    gross_losses = abs(avg_loss * loss_count)
-    profit_factor = float(gross_wins / gross_losses) if gross_losses > 0 else None
+    # 盈亏比: 平均盈利 / |平均亏损|
+    abs_avg_loss = abs(avg_loss)
+    win_loss_ratio = float(avg_win / abs_avg_loss) if abs_avg_loss > 0 else None
 
     # Expectancy: 基于每笔 round-trip 的平均期望值
     # E = avg_win × win_rate + avg_loss × (1 - win_rate)
@@ -406,7 +405,7 @@ def get_performance_metrics(
         "win_rate": round(win_rate, 2),
         "avg_win": avg_win,
         "avg_loss": avg_loss,
-        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+        "win_loss_ratio": round(win_loss_ratio, 2) if win_loss_ratio is not None else None,
         "expectancy": expectancy,
         "trading_days": trading_days,
     }

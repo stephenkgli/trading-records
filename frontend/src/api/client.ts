@@ -127,7 +127,7 @@ export interface PerformanceMetrics {
   win_rate: number;
   avg_win: string;
   avg_loss: string;
-  profit_factor: number | null;
+  win_loss_ratio: number | null;
   expectancy: string;
   trading_days: number;
 }

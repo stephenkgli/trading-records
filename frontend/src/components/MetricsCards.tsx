@@ -17,9 +17,9 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
       color: metrics.win_rate >= 50 ? "text-green-600" : "text-red-600",
     },
     {
-      label: "Profit Factor",
-      value: metrics.profit_factor !== null ? String(metrics.profit_factor) : "N/A",
-      color: metrics.profit_factor !== null && metrics.profit_factor >= 1 ? "text-green-600" : "text-red-600",
+label: "Win/Loss Ratio",
+      value: metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A",
+      color: metrics.win_loss_ratio !== null && metrics.win_loss_ratio >= 1 ? "text-green-600" : "text-red-600",
     },
     {
       label: "Total Trades",

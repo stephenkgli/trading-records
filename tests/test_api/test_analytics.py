@@ -237,7 +237,7 @@ class TestAnalyticsPerformance:
         assert data["win_rate"] == pytest.approx(50.0)
         assert float(data["avg_win"]) == pytest.approx(500)
         assert float(data["avg_loss"]) == pytest.approx(-250)
-        assert data["profit_factor"] == pytest.approx(2.0)
+        assert data["win_loss_ratio"] == pytest.approx(2.0)
         assert float(data["expectancy"]) == pytest.approx(125)
 
     def test_performance_empty_db(self, client, auth_headers):
