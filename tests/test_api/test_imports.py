@@ -41,6 +41,20 @@ class TestCSVUpload:
         data = response.json()
         assert "records_imported" in data
 
+    def test_upload_tradovate_performance_csv(
+        self, client, auth_headers, tradovate_performance_csv
+    ):
+        """Uploading Tradovate Performance CSV should succeed with full count."""
+        response = client.post(
+            "/api/v1/import/csv",
+            headers=auth_headers,
+            files={"file": ("Performance.csv", tradovate_performance_csv, "text/csv")},
+        )
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert data["records_total"] == 20
+        assert data["records_imported"] == 20
+
     def test_upload_empty_csv(self, client, auth_headers):
         """Uploading an empty CSV should return 400."""
         response = client.post(
@@ -74,7 +88,7 @@ class TestCSVUpload:
 class TestFlexTrigger:
     """Test manual Flex Query trigger endpoint."""
 
-    @patch("backend.api.imports.IBKRFlexIngester")
+    @patch("backend.services.import_service.IBKRFlexIngester")
     def test_trigger_flex_query(self, mock_ingester_cls, client, auth_headers):
         """POST /api/v1/import/flex/trigger should trigger an import."""
         mock_result = ImportResult(

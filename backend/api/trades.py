@@ -6,12 +6,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from backend.api.dependencies import get_trade_service
 from backend.database import get_db
-from backend.models.trade import Trade
 from backend.schemas.trade import TradeListResponse, TradeResponse, TradeSummaryResponse
+from backend.services.trade_service import TradeService
 
 router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
 
@@ -29,48 +29,21 @@ def list_trades(
     sort: str = Query("executed_at"),
     order: str = Query("desc"),
     db: Session = Depends(get_db),
+    service: TradeService = Depends(get_trade_service),
 ):
     """List trades with filtering, pagination, and sorting."""
-    query = select(Trade)
-
-    # Apply filters
-    if account_id:
-        query = query.where(Trade.account_id == account_id)
-    if broker:
-        query = query.where(Trade.broker == broker)
-    if symbol:
-        query = query.where(Trade.symbol == symbol)
-    if asset_class:
-        query = query.where(Trade.asset_class == asset_class)
-    if from_date:
-        query = query.where(Trade.executed_at >= from_date)
-    if to_date:
-        query = query.where(Trade.executed_at <= to_date)
-
-    # Count total
-    count_query = select(func.count()).select_from(query.subquery())
-    total = db.execute(count_query).scalar_one()
-
-    # Sorting
-    sort_column = getattr(Trade, sort, Trade.executed_at)
-    if order == "asc":
-        query = query.order_by(sort_column.asc())
-    else:
-        query = query.order_by(sort_column.desc())
-
-    # Pagination
-    offset = (page - 1) * per_page
-    query = query.offset(offset).limit(per_page)
-
-    trades = db.execute(query).scalars().all()
-    pages = (total + per_page - 1) // per_page if total > 0 else 1
-
-    return TradeListResponse(
-        trades=[TradeResponse.model_validate(t) for t in trades],
-        total=total,
+    return service.list_trades(
+        db,
+        account_id=account_id,
+        broker=broker,
+        symbol=symbol,
+        asset_class=asset_class,
+        from_date=from_date,
+        to_date=to_date,
         page=page,
         per_page=per_page,
-        pages=pages,
+        sort=sort,
+        order=order,
     )
 
 
@@ -83,46 +56,28 @@ def trades_summary(
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
     db: Session = Depends(get_db),
+    service: TradeService = Depends(get_trade_service),
 ):
     """Get aggregated trade statistics for the filtered scope."""
-    pnl_expr = case(
-        (Trade.side == "sell", Trade.price * Trade.quantity),
-        (Trade.side == "buy", -Trade.price * Trade.quantity),
-        else_=0,
+    return service.get_summary(
+        db,
+        account_id=account_id,
+        broker=broker,
+        symbol=symbol,
+        asset_class=asset_class,
+        from_date=from_date,
+        to_date=to_date,
     )
-
-    query = select(
-        func.count(Trade.id).label("total_trades"),
-        func.coalesce(func.sum(Trade.quantity), 0).label("total_quantity"),
-        func.coalesce(func.sum(func.abs(Trade.commission)), 0).label("total_commissions"),
-        func.coalesce(func.sum(pnl_expr), 0).label("gross_pnl"),
-        (
-            func.coalesce(func.sum(pnl_expr), 0)
-            - func.coalesce(func.sum(func.abs(Trade.commission)), 0)
-        ).label("net_pnl"),
-    )
-
-    if account_id:
-        query = query.where(Trade.account_id == account_id)
-    if broker:
-        query = query.where(Trade.broker == broker)
-    if symbol:
-        query = query.where(Trade.symbol == symbol)
-    if asset_class:
-        query = query.where(Trade.asset_class == asset_class)
-    if from_date:
-        query = query.where(Trade.executed_at >= from_date)
-    if to_date:
-        query = query.where(Trade.executed_at <= to_date)
-
-    row = db.execute(query).mappings().one()
-    return TradeSummaryResponse(**dict(row))
 
 
 @router.get("/{trade_id}", response_model=TradeResponse)
-def get_trade(trade_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_trade(
+    trade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: TradeService = Depends(get_trade_service),
+):
     """Get a single trade by ID."""
-    trade = db.get(Trade, trade_id)
-    if not trade:
+    result = service.get_trade(db, trade_id)
+    if not result:
         raise HTTPException(status_code=404, detail="Trade not found")
-    return TradeResponse.model_validate(trade)
+    return result

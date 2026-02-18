@@ -31,6 +31,7 @@ class NormalizedTrade(BaseModel):
     order_id: str | None = None
     exchange: str | None = None
     currency: str = "USD"
+    multiplier: Decimal = Decimal("1")  # 合约乘数（期货：每点价值；股票：1）
     raw_data: dict = Field(default_factory=dict)
 
 
@@ -51,6 +52,7 @@ class TradeResponse(BaseModel):
     quantity: Decimal
     price: Decimal
     commission: Decimal
+    multiplier: Decimal = Decimal("1")
     executed_at: datetime
     order_id: str | None = None
     exchange: str | None = None

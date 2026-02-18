@@ -206,6 +206,40 @@ class TestDuplicateFillIdHandling:
 
 
 # ===========================================================================
+# Multiplier Inference
+# ===========================================================================
+
+class TestTradovatePerfMultiplier:
+    """Test multiplier inference and inheritance from pnl and price diff."""
+
+    @pytest.fixture
+    def importer(self):
+        return CSVImporter()
+
+    def test_multiplier_inferred_from_pnl(self, importer, tradovate_performance_csv):
+        """Non-zero pnl rows should infer a multiplier (e.g., MES contracts)."""
+        trades = importer._parse_tradovate_performance_csv(
+            tradovate_performance_csv, "Performance.csv"
+        )
+        first_buy = trades[0]
+        assert first_buy.symbol == "MESH5"
+        assert first_buy.multiplier == Decimal("5")
+
+    def test_multiplier_inherited_for_zero_pnl_rows(self, importer, tradovate_performance_csv):
+        """Rows with zero pnl should inherit multiplier from same symbol rows."""
+        trades = importer._parse_tradovate_performance_csv(
+            tradovate_performance_csv, "Performance.csv"
+        )
+        zero_pnl_trades = [
+            t for t in trades
+            if t.symbol == "MESH5" and t.price == Decimal("6101.25")
+        ]
+        assert len(zero_pnl_trades) == 2
+        for trade in zero_pnl_trades:
+            assert trade.multiplier == Decimal("5")
+
+
+# ===========================================================================
 # Datetime Parsing
 # ===========================================================================
 

@@ -101,6 +101,7 @@ class BaseIngester:
                             quantity=abs(normalized.quantity),
                             price=normalized.price,
                             commission=normalized.commission,
+                            multiplier=normalized.multiplier,
                             executed_at=normalized.executed_at,
                             order_id=normalized.order_id,
                             exchange=normalized.exchange,

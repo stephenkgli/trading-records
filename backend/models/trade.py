@@ -56,6 +56,10 @@ class Trade(Base):
     commission: Mapped[Decimal] = mapped_column(
         Numeric(18, 8), nullable=False, default=Decimal("0")
     )
+    multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(18, 8), nullable=False, default=Decimal("1"),
+        comment="Contract multiplier (value per point for futures, 1 for stocks)"
+    )
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, comment="Always UTC"
     )

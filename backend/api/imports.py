@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.api.dependencies import get_import_service
 from backend.database import get_db
-from backend.ingestion.csv_importer import CSVImporter
-from backend.ingestion.ibkr_flex import IBKRFlexIngester
-from backend.models.import_log import ImportLog
 from backend.schemas.import_result import (
     ImportLogListResponse,
-    ImportLogResponse,
     ImportResult,
 )
+from backend.services.import_service import ImportService
 
 logger = structlog.get_logger(__name__)
 
@@ -26,6 +23,7 @@ router = APIRouter(prefix="/api/v1/import", tags=["import"])
 async def upload_csv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    service: ImportService = Depends(get_import_service),
 ):
     """Upload a CSV file for import.
 
@@ -38,12 +36,8 @@ async def upload_csv(
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    logger.info("csv_upload", filename=file.filename, size=len(content))
-
     try:
-        importer = CSVImporter()
-        result = importer.import_csv(content, filename=file.filename, db=db)
-        return result
+        return service.import_csv(content, filename=file.filename, db=db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -52,12 +46,13 @@ async def upload_csv(
 
 
 @router.post("/flex/trigger", response_model=ImportResult)
-def trigger_flex_query(db: Session = Depends(get_db)):
+def trigger_flex_query(
+    db: Session = Depends(get_db),
+    service: ImportService = Depends(get_import_service),
+):
     """Manually trigger an IBKR Flex Query import."""
     try:
-        ingester = IBKRFlexIngester()
-        result = ingester.fetch_and_import(db=db)
-        return result
+        return service.trigger_flex_query(db=db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -66,14 +61,13 @@ def trigger_flex_query(db: Session = Depends(get_db)):
 
 
 @router.post("/tradovate/trigger", response_model=ImportResult)
-def trigger_tradovate(db: Session = Depends(get_db)):
+def trigger_tradovate(
+    db: Session = Depends(get_db),
+    service: ImportService = Depends(get_import_service),
+):
     """Manually trigger a Tradovate API import."""
     try:
-        from backend.ingestion.tradovate import TradovateIngester
-
-        ingester = TradovateIngester()
-        result = ingester.fetch_and_import(db=db)
-        return result
+        return service.trigger_tradovate(db=db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -86,22 +80,7 @@ def list_import_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    service: ImportService = Depends(get_import_service),
 ):
     """List import history."""
-    count_query = select(func.count()).select_from(ImportLog)
-    total = db.execute(count_query).scalar_one()
-
-    query = (
-        select(ImportLog)
-        .order_by(ImportLog.started_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-    )
-    logs = db.execute(query).scalars().all()
-
-    return ImportLogListResponse(
-        logs=[ImportLogResponse.model_validate(log) for log in logs],
-        total=total,
-        page=page,
-        per_page=per_page,
-    )
+    return service.list_import_logs(db, page=page, per_page=per_page)

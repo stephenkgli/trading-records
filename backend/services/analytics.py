@@ -118,13 +118,13 @@ def _compute_daily_summaries_from_trades(
             DATE(t.executed_at) AS date,
             t.account_id AS account_id,
             SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity
-                WHEN t.side = 'buy' THEN -t.price * t.quantity
+                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
+                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
                 ELSE 0
             END) AS gross_pnl,
             SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity
-                WHEN t.side = 'buy' THEN -t.price * t.quantity
+                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
+                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
                 ELSE 0
             END) - SUM(ABS(t.commission)) AS net_pnl,
             SUM(ABS(t.commission)) AS commissions,
@@ -181,8 +181,8 @@ def get_by_symbol(
         SELECT
             t.symbol,
             SUM(CASE
-                WHEN t.side = 'sell' THEN t.price * t.quantity
-                WHEN t.side = 'buy' THEN -t.price * t.quantity
+                WHEN t.side = 'sell' THEN t.price * t.quantity * t.multiplier
+                WHEN t.side = 'buy' THEN -t.price * t.quantity * t.multiplier
             END) - SUM(ABS(t.commission)) AS net_pnl,
             COUNT(*) AS trade_count,
             COALESCE(g.win_count, 0) AS win_count,
@@ -344,8 +344,13 @@ def get_performance_metrics(
     gross_losses = abs(avg_loss * loss_count)
     profit_factor = float(gross_wins / gross_losses) if gross_losses > 0 else None
 
-    # Expectancy
-    expectancy = net_pnl / total_trades if total_trades > 0 else Decimal("0")
+    # Expectancy: 基于每笔 round-trip 的平均期望值
+    # E = avg_win × win_rate + avg_loss × (1 - win_rate)
+    if total_decided > 0:
+        wr = Decimal(str(win_count)) / Decimal(str(total_decided))
+        expectancy = avg_win * wr + avg_loss * (Decimal("1") - wr)
+    else:
+        expectancy = Decimal("0")
 
     return {
         "total_pnl": total_pnl,

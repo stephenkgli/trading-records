@@ -248,6 +248,63 @@ class TestImportResultFields:
         assert str(trade.import_log_id) == str(result.import_log_id)
 
 
+class TestValidationStatus:
+    """Test status outcomes when validation errors occur."""
+
+    def test_partial_import_when_some_invalid(self, db_session, make_normalized_trade):
+        """Mixed valid + invalid trades should result in partial status."""
+        trades = [
+            make_normalized_trade(broker_exec_id="VALID001"),
+            make_normalized_trade(broker_exec_id="INVALID001", price=Decimal("0")),
+        ]
+
+        ingester = _TestIngester()
+        result = ingester.import_records(trades, db=db_session)
+
+        assert result.records_total == 2
+        assert result.records_imported == 1
+        assert result.records_failed == 1
+        assert result.records_skipped_dup == 0
+        assert result.status == "partial"
+        assert len(result.errors) == 1
+
+    def test_failed_import_when_all_invalid(self, db_session, make_normalized_trade):
+        """All invalid trades should result in failed status with zero inserts."""
+        trades = [
+            make_normalized_trade(broker_exec_id="BAD001", price=Decimal("0")),
+            make_normalized_trade(broker_exec_id="BAD002", quantity=Decimal("0")),
+        ]
+
+        ingester = _TestIngester()
+        result = ingester.import_records(trades, db=db_session)
+
+        assert result.records_total == 2
+        assert result.records_imported == 0
+        assert result.records_failed == 2
+        assert result.status == "failed"
+        assert len(result.errors) == 2
+
+
+class TestPostImportHooks:
+    """Test post-import hooks do not break successful imports."""
+
+    def test_hook_failure_does_not_abort_import(self, db_session, make_normalized_trade):
+        """Post-import hook errors should be swallowed and logged."""
+        trade = make_normalized_trade(broker_exec_id="HOOK001")
+        ingester = _TestIngester()
+
+        with patch(
+            "backend.services.trade_grouper.recompute_groups",
+            side_effect=RuntimeError("boom"),
+        ) as mock_recompute:
+            result = ingester.import_records([trade], db=db_session)
+
+        assert result.status == "success"
+        mock_recompute.assert_called_once_with(
+            db=db_session, symbol=trade.symbol, account_id=trade.account_id
+        )
+
+
 class TestTransactionRollback:
     """Test all-or-nothing import transaction behavior."""
 

@@ -108,6 +108,24 @@ class TestAnalyticsDaily:
         )
         assert response.status_code == 200
 
+    def test_daily_returns_expected_values(self, client, auth_headers, db_session):
+        """Daily summaries should fall back to trades in SQLite and compute P&L."""
+        _seed_analytics_data(db_session)
+        response = client.get("/api/v1/analytics/daily", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data) == 2
+        assert data[0]["date"] == "2025-01-15"
+        assert float(data[0]["net_pnl"]) == pytest.approx(498)
+        assert float(data[0]["commissions"]) == pytest.approx(2)
+        assert data[0]["trade_count"] == 2
+
+        assert data[1]["date"] == "2025-01-16"
+        assert float(data[1]["net_pnl"]) == pytest.approx(-252)
+        assert float(data[1]["commissions"]) == pytest.approx(2)
+        assert data[1]["trade_count"] == 2
+
     def test_daily_empty_db(self, client, auth_headers):
         """Empty database should return empty results, not error."""
         response = client.get("/api/v1/analytics/daily", headers=auth_headers)
@@ -201,6 +219,26 @@ class TestAnalyticsPerformance:
         _seed_analytics_data(db_session)
         response = client.get("/api/v1/analytics/performance", headers=auth_headers)
         assert response.status_code == 200
+
+    def test_performance_returns_expected_metrics(self, client, auth_headers, db_session):
+        """Performance metrics should reflect trade_groups and daily summaries."""
+        _seed_analytics_data(db_session)
+        response = client.get("/api/v1/analytics/performance", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["total_trades"] == 4
+        assert data["trading_days"] == 2
+        assert float(data["total_pnl"]) == pytest.approx(250)
+        assert float(data["total_commissions"]) == pytest.approx(4)
+        assert float(data["net_pnl"]) == pytest.approx(246)
+        assert data["win_count"] == 1
+        assert data["loss_count"] == 1
+        assert data["win_rate"] == pytest.approx(50.0)
+        assert float(data["avg_win"]) == pytest.approx(500)
+        assert float(data["avg_loss"]) == pytest.approx(-250)
+        assert data["profit_factor"] == pytest.approx(2.0)
+        assert float(data["expectancy"]) == pytest.approx(125)
 
     def test_performance_empty_db(self, client, auth_headers):
         """Performance metrics with no data should return sensible defaults."""

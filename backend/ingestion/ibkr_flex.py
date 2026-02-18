@@ -299,6 +299,12 @@ class IBKRFlexIngester(BaseIngester):
         if side not in ("buy", "sell"):
             return None
 
+        # Determine multiplier (contract multiplier for futures/options)
+        multiplier_str = safe_str(attrs.get("multiplier", "1"))
+        multiplier = safe_decimal(multiplier_str)
+        if multiplier <= 0:
+            multiplier = Decimal("1")
+
         return NormalizedTrade(
             broker="ibkr",
             broker_exec_id=trade_id,
@@ -314,6 +320,7 @@ class IBKRFlexIngester(BaseIngester):
             order_id=safe_str(attrs.get("ibOrderID")) or None,
             exchange=safe_str(attrs.get("exchange")) or None,
             currency=safe_str(attrs.get("currency", "USD")),
+            multiplier=multiplier,
             raw_data=attrs,
         )
 

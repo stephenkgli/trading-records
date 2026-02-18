@@ -435,6 +435,17 @@ class CSVImporter(BaseIngester):
         logger.info(
             "tradovate_perf_csv_parsed", filename=filename, trade_count=len(trades)
         )
+
+        # 第二轮：对 multiplier 为 1（无法从 price_diff 推断）的 trade，
+        # 从同 symbol 的其他行继承 multiplier
+        symbol_multiplier: dict[str, Decimal] = {}
+        for t in trades:
+            if t.multiplier != Decimal("1"):
+                symbol_multiplier[t.symbol] = t.multiplier
+        for t in trades:
+            if t.multiplier == Decimal("1") and t.symbol in symbol_multiplier:
+                t.multiplier = symbol_multiplier[t.symbol]
+
         return trades
 
     def _normalize_tradovate_perf_row(
@@ -460,6 +471,17 @@ class CSVImporter(BaseIngester):
 
         buy_fill_id = safe_str(record.get("buyFillId", ""))
         sell_fill_id = safe_str(record.get("sellFillId", ""))
+
+        # 从 CSV 的 pnl 字段和价格差反推合约乘数（point_value）
+        # pnl 格式: "$62.50" 或 "$(41.25)"
+        pnl_str = safe_str(record.get("pnl", ""))
+        pnl_value = self._parse_tradovate_pnl(pnl_str)
+        price_diff = sell_price - buy_price
+        if price_diff != 0 and qty > 0 and pnl_value is not None:
+            multiplier = abs(pnl_value / (price_diff * qty))
+        else:
+            # 无法推断时默认为 1
+            multiplier = Decimal("1")
 
         results: list[NormalizedTrade] = []
 
@@ -488,6 +510,7 @@ class CSVImporter(BaseIngester):
                 order_id=None,
                 exchange="TRADOVATE",
                 currency="USD",
+                multiplier=multiplier,
                 raw_data=record,
             ))
 
@@ -516,10 +539,33 @@ class CSVImporter(BaseIngester):
                 order_id=None,
                 exchange="TRADOVATE",
                 currency="USD",
+                multiplier=multiplier,
                 raw_data=record,
             ))
 
         return results
+
+    @staticmethod
+    def _parse_tradovate_pnl(pnl_str: str) -> Decimal | None:
+        """解析 Tradovate Performance CSV 的 pnl 字段。
+
+        格式: "$62.50" (正), "$(41.25)" (负), "$0.00"
+        """
+        if not pnl_str:
+            return None
+        s = pnl_str.strip()
+        negative = False
+        if "$(" in s and s.endswith(")"):
+            negative = True
+            s = s.replace("$(", "").replace(")", "")
+        else:
+            s = s.replace("$", "")
+        s = s.replace(",", "")
+        try:
+            val = Decimal(s)
+            return -val if negative else val
+        except Exception:
+            return None
 
     @staticmethod
     def _parse_tradovate_csv_datetime(dt_str: str) -> datetime | None:

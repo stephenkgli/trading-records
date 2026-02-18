@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.auth import APIKeyMiddleware
 from backend.config import settings
 from backend.logging_config import setup_logging
+from backend.exceptions import register_exception_handlers
 
 logger = structlog.get_logger(__name__)
 
@@ -49,6 +50,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+register_exception_handlers(app)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -61,20 +64,10 @@ app.add_middleware(
 # API Key Auth
 app.add_middleware(APIKeyMiddleware)
 
-# Routers
-from backend.api.health import router as health_router  # noqa: E402
-from backend.api.trades import router as trades_router  # noqa: E402
-from backend.api.imports import router as imports_router  # noqa: E402
-from backend.api.groups import router as groups_router  # noqa: E402
-from backend.api.analytics import router as analytics_router  # noqa: E402
-from backend.api.config import router as config_router  # noqa: E402
+# Routers — aggregated from api/v1
+from backend.api.v1 import v1_router  # noqa: E402
 
-app.include_router(health_router)
-app.include_router(trades_router)
-app.include_router(imports_router)
-app.include_router(groups_router)
-app.include_router(analytics_router)
-app.include_router(config_router)
+app.include_router(v1_router)
 
 # Serve frontend static files (built React app)
 static_dir = Path(__file__).parent.parent / "static"

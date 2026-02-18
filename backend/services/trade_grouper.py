@@ -168,6 +168,7 @@ def _recompute_for_pair(db: Session, account_id: str, symbol: str) -> tuple[int,
                     net_qty=qty,
                     cost_basis=trade.price * qty,
                     direction=direction,
+                    multiplier=trade.multiplier if trade.multiplier else Decimal("1"),
                 )
             )
             groups_created += 1
@@ -189,9 +190,9 @@ def _recompute_for_pair(db: Session, account_id: str, symbol: str) -> tuple[int,
                         else Decimal("0")
                     )
                     if matched_group.direction == "long":
-                        pnl = (trade.price - avg_entry) * close_qty
+                        pnl = (trade.price - avg_entry) * close_qty * matched_group.multiplier
                     else:
-                        pnl = (avg_entry - trade.price) * close_qty
+                        pnl = (avg_entry - trade.price) * close_qty * matched_group.multiplier
 
                     matched_group.group.status = "closed"
                     matched_group.group.realized_pnl = pnl
@@ -235,6 +236,7 @@ def _recompute_for_pair(db: Session, account_id: str, symbol: str) -> tuple[int,
                                 net_qty=remaining,
                                 cost_basis=trade.price * remaining,
                                 direction=new_direction,
+                                multiplier=trade.multiplier if trade.multiplier else Decimal("1"),
                             )
                         )
                         groups_created += 1
@@ -284,11 +286,13 @@ class _OpenGroup:
         net_qty: Decimal,
         cost_basis: Decimal,
         direction: str,
+        multiplier: Decimal = Decimal("1"),
     ):
         self.group = group
         self.net_qty = net_qty
         self.cost_basis = cost_basis
         self.direction = direction
+        self.multiplier = multiplier
 
 
 def _find_matching_group(

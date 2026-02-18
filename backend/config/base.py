@@ -1,12 +1,12 @@
-"""Application configuration using pydantic-settings."""
+"""Base application settings definitions."""
 
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+class BaseAppSettings(BaseSettings):
+    """Base application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -45,6 +45,3 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-
-settings = Settings()
