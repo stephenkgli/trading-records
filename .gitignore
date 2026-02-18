@@ -62,3 +62,8 @@ static/
 
 # Chat logs
 chats/
+
+# Agent
+.claude/
+.codex/
+.codebuddy/
