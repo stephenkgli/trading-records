@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="TradingRecords" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567" fromDate="2025-01-01" toDate="2025-01-31" period="LastBusinessDay" whenGenerated="2025-02-01;09:00:00">
+      <Trades />
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

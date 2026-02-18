@@ -1,0 +1,70 @@
+[
+  {
+    "id": 100001,
+    "orderId": 200001,
+    "contractId": 3001,
+    "timestamp": "2025-01-15T14:30:00.000Z",
+    "tradeDate": {
+      "year": 2025,
+      "month": 1,
+      "day": 15
+    },
+    "action": "Buy",
+    "qty": 3,
+    "price": 5025.50,
+    "active": true,
+    "finallyPaired": 0,
+    "accountId": 12345
+  },
+  {
+    "id": 100002,
+    "orderId": 200002,
+    "contractId": 3001,
+    "timestamp": "2025-01-15T15:45:00.000Z",
+    "tradeDate": {
+      "year": 2025,
+      "month": 1,
+      "day": 15
+    },
+    "action": "Sell",
+    "qty": 3,
+    "price": 5032.75,
+    "active": true,
+    "finallyPaired": 100001,
+    "accountId": 12345
+  },
+  {
+    "id": 100003,
+    "orderId": 200003,
+    "contractId": 3002,
+    "timestamp": "2025-01-16T09:30:00.000Z",
+    "tradeDate": {
+      "year": 2025,
+      "month": 1,
+      "day": 16
+    },
+    "action": "Sell",
+    "qty": 1,
+    "price": 20850.00,
+    "active": true,
+    "finallyPaired": 0,
+    "accountId": 12345
+  },
+  {
+    "id": 100004,
+    "orderId": 200004,
+    "contractId": 3002,
+    "timestamp": "2025-01-16T11:00:00.000Z",
+    "tradeDate": {
+      "year": 2025,
+      "month": 1,
+      "day": 16
+    },
+    "action": "Buy",
+    "qty": 1,
+    "price": 20830.00,
+    "active": true,
+    "finallyPaired": 100003,
+    "accountId": 12345
+  }
+]

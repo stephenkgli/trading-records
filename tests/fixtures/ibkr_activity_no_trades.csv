@@ -1,0 +1,10 @@
+Statement,Header,Field Name,Field Value
+Statement,Data,BrokerName,Interactive Brokers
+Statement,Data,AccountId,U1234567
+Statement,Data,FromDate,2025-01-01
+Statement,Data,ToDate,2025-01-31
+Statement,Data,Period,LastBusinessDay
+Statement,Data,WhenGenerated,2025-02-01
+
+Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,Proceeds,Comm/Fee,Basis,Realized P/L,Code
+Trades,Total,,,,,,,,,-0.00,,,
