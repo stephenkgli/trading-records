@@ -8,8 +8,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  fetchTrades,
-  fetchTradeDetail,
   fetchImportLogs,
   fetchDailySummaries,
   fetchCalendar,
@@ -20,9 +18,6 @@ import {
 } from "../endpoints";
 
 import type {
-  Trade,
-  TradeListResponse,
-  TradeFilters,
   ImportLogListResponse,
   DailySummary,
   CalendarEntry,
@@ -65,21 +60,6 @@ function useQuery<T>(fetcher: () => Promise<T>, deps: unknown[]): UseQueryResult
   }, [refetch]);
 
   return { data, loading, error, refetch };
-}
-
-// ---------------------------------------------------------------------------
-// Trade hooks
-// ---------------------------------------------------------------------------
-
-export function useTrades(filters: TradeFilters = {}): UseQueryResult<TradeListResponse> {
-  return useQuery(
-    () => fetchTrades(filters),
-    [JSON.stringify(filters)]
-  );
-}
-
-export function useTradeDetail(id: string): UseQueryResult<Trade> {
-  return useQuery(() => fetchTradeDetail(id), [id]);
 }
 
 // ---------------------------------------------------------------------------

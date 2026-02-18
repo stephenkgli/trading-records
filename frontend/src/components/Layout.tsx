@@ -3,7 +3,6 @@ import clsx from "clsx";
 
 const navItems = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/trades", label: "Trades" },
   { to: "/groups", label: "Groups" },
   { to: "/analytics", label: "Analytics" },
   { to: "/import", label: "Import" },

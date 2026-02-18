@@ -33,68 +33,6 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
-// Trades
-export interface Trade {
-  id: string;
-  broker: string;
-  broker_exec_id: string;
-  import_log_id: string | null;
-  account_id: string;
-  symbol: string;
-  underlying: string | null;
-  asset_class: string;
-  side: string;
-  quantity: string;
-  price: string;
-  commission: string;
-  executed_at: string;
-  order_id: string | null;
-  exchange: string | null;
-  currency: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TradeListResponse {
-  trades: Trade[];
-  total: number;
-  page: number;
-  per_page: number;
-  pages: number;
-}
-
-export interface TradeFilters {
-  symbol?: string;
-  broker?: string;
-  asset_class?: string;
-  from?: string;
-  to?: string;
-  page?: number;
-  per_page?: number;
-  sort?: string;
-  order?: string;
-}
-
-export async function fetchTrades(filters: TradeFilters = {}): Promise<TradeListResponse> {
-  const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") {
-      params.set(key, String(value));
-    }
-  });
-  const response = await fetch(`${API_BASE}/trades?${params}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
-export async function fetchTradeDetail(id: string): Promise<Trade> {
-  const response = await fetch(`${API_BASE}/trades/${id}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
 // Import
 export interface ImportResult {
   import_log_id: string;

@@ -1,8 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
-import TradesPage from "./pages/TradesPage";
-import TradeDetailPage from "./pages/TradeDetailPage";
 import GroupsPage from "./pages/GroupsPage";
 import GroupDetailPage from "./pages/GroupDetailPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
@@ -14,8 +12,6 @@ function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<DashboardPage />} />
-        <Route path="trades" element={<TradesPage />} />
-        <Route path="trades/:id" element={<TradeDetailPage />} />
         <Route path="groups" element={<GroupsPage />} />
         <Route path="groups/:id" element={<GroupDetailPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />

@@ -3,12 +3,6 @@
  */
 
 export type {
-  Trade,
-  TradeListResponse,
-  TradeFilters,
-} from "./trades";
-
-export type {
   ImportResult,
   ImportLog,
   ImportLogListResponse,

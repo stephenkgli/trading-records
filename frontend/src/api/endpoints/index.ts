@@ -2,7 +2,6 @@
  * Barrel export for all API endpoints.
  */
 
-export { fetchTrades, fetchTradeDetail } from "./trades";
 export {
   uploadCsv,
   triggerFlexQuery,
