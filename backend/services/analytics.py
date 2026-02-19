@@ -231,6 +231,12 @@ def get_by_symbol(
         WHERE tg.status = 'closed'
     """
 
+    if from_date:
+        query += " AND DATE(tg.closed_at) >= :tg_from_date"
+        params["tg_from_date"] = from_date
+    if to_date:
+        query += " AND DATE(tg.closed_at) <= :tg_to_date"
+        params["tg_to_date"] = to_date
     if account_id:
         query += " AND tg.account_id = :account_id"
 
