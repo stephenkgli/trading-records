@@ -1,27 +1,34 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBySymbol, fetchPerformance, fetchDailySummaries } from "../api/client";
 import EquityCurve from "../components/EquityCurve";
 import SymbolBreakdown from "../components/SymbolBreakdown";
+import DateRangeSelector, { type DateRange } from "../components/DateRangeSelector";
 
 export default function AnalyticsPage() {
+  const [dateRange, setDateRange] = useState<DateRange>({});
+
   const { data: metrics } = useQuery({
-    queryKey: ["performance"],
-    queryFn: () => fetchPerformance(),
+    queryKey: ["performance", dateRange.from, dateRange.to],
+    queryFn: () => fetchPerformance(dateRange.from, dateRange.to),
   });
 
   const { data: symbols } = useQuery({
-    queryKey: ["bySymbol"],
-    queryFn: () => fetchBySymbol(),
+    queryKey: ["bySymbol", dateRange.from, dateRange.to],
+    queryFn: () => fetchBySymbol(dateRange.from, dateRange.to),
   });
 
   const { data: dailyData } = useQuery({
-    queryKey: ["dailySummaries"],
-    queryFn: () => fetchDailySummaries(),
+    queryKey: ["dailySummaries", dateRange.from, dateRange.to],
+    queryFn: () => fetchDailySummaries(dateRange.from, dateRange.to),
   });
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Analytics</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-xl font-semibold">Analytics</h1>
+        <DateRangeSelector value={dateRange} onChange={setDateRange} />
+      </div>
 
       {/* Performance Stats */}
       {metrics && (
@@ -33,7 +40,7 @@ export default function AnalyticsPage() {
             <Stat label="Total Trades" value={String(metrics.total_trades)} />
             <Stat label="Win Rate" value={`${metrics.win_rate}%`}
               color={metrics.win_rate >= 50 ? "green" : "red"} />
-<Stat label="Win/Loss Ratio" value={metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A"} />
+            <Stat label="Win/Loss Ratio" value={metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A"} />
             <Stat label="Avg Win" value={`$${Number(metrics.avg_win).toFixed(2)}`} color="green" />
             <Stat label="Avg Loss" value={`$${Number(metrics.avg_loss).toFixed(2)}`} color="red" />
             <Stat label="Expectancy" value={`$${Number(metrics.expectancy).toFixed(2)}`}
