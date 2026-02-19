@@ -2,68 +2,11 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-from decimal import Decimal
-
-from backend.models.trade import Trade
-
-
-def _seed_group_trades(db_session) -> None:
-    trades = [
-        Trade(
-            id=uuid.uuid4(),
-            broker="ibkr",
-            broker_exec_id="GRP0001",
-            account_id="U1234567",
-            symbol="AAPL",
-            asset_class="stock",
-            side="buy",
-            quantity=Decimal("100"),
-            price=Decimal("100"),
-            commission=Decimal("1"),
-            executed_at=datetime(2025, 1, 10, 10, 0, 0, tzinfo=timezone.utc),
-            currency="USD",
-            raw_data={},
-        ),
-        Trade(
-            id=uuid.uuid4(),
-            broker="ibkr",
-            broker_exec_id="GRP0002",
-            account_id="U1234567",
-            symbol="AAPL",
-            asset_class="stock",
-            side="sell",
-            quantity=Decimal("100"),
-            price=Decimal("110"),
-            commission=Decimal("1"),
-            executed_at=datetime(2025, 1, 10, 14, 0, 0, tzinfo=timezone.utc),
-            currency="USD",
-            raw_data={},
-        ),
-        Trade(
-            id=uuid.uuid4(),
-            broker="ibkr",
-            broker_exec_id="GRP0003",
-            account_id="U1234567",
-            symbol="MSFT",
-            asset_class="stock",
-            side="buy",
-            quantity=Decimal("50"),
-            price=Decimal("300"),
-            commission=Decimal("1"),
-            executed_at=datetime(2025, 1, 11, 10, 0, 0, tzinfo=timezone.utc),
-            currency="USD",
-            raw_data={},
-        ),
-    ]
-    db_session.add_all(trades)
-    db_session.flush()
 
 
 class TestGroupsAPI:
-    def test_groups_recompute_and_list(self, client, auth_headers, db_session):
-        _seed_group_trades(db_session)
+    def test_groups_recompute_and_list(self, client, auth_headers, db_session, seed_group_trades):
+        seed_group_trades()
 
         recompute_resp = client.post("/api/v1/groups/recompute", headers=auth_headers)
         assert recompute_resp.status_code == 200
@@ -76,8 +19,8 @@ class TestGroupsAPI:
         assert list_data["total"] >= 1
         assert len(list_data["groups"]) >= 1
 
-    def test_group_detail_and_patch(self, client, auth_headers, db_session):
-        _seed_group_trades(db_session)
+    def test_group_detail_and_patch(self, client, auth_headers, db_session, seed_group_trades):
+        seed_group_trades()
         client.post("/api/v1/groups/recompute", headers=auth_headers)
 
         groups_resp = client.get("/api/v1/groups?symbol=AAPL", headers=auth_headers)

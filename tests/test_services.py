@@ -13,79 +13,13 @@ bypassing the API layer.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 
-from backend.models.trade import Trade
-from backend.models.trade_group import TradeGroup
 from backend.services.analytics_service import AnalyticsService
 from backend.services.analytics_registry import get_views
 from backend.services.import_service import ImportService
 from backend.services.trade_service import TradeService
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _seed_trades(db_session, count=5):
-    """Insert test trades and return them."""
-    trades = []
-    symbols = ["AAPL", "MSFT", "GOOG"]
-    for i in range(count):
-        trade = Trade(
-            id=uuid.uuid4(),
-            broker="ibkr",
-            broker_exec_id=f"SVC{i:04d}",
-            account_id="U1234567",
-            symbol=symbols[i % len(symbols)],
-            asset_class="stock",
-            side="buy" if i % 2 == 0 else "sell",
-            quantity=Decimal("100"),
-            price=Decimal(f"{150 + i}.00"),
-            commission=Decimal("1.00"),
-            executed_at=datetime(2025, 1, 15 + (i % 10), 10, i, 0, tzinfo=timezone.utc),
-            currency="USD",
-            raw_data={"seed": i},
-        )
-        trades.append(trade)
-        db_session.add(trade)
-    db_session.flush()
-    return trades
-
-
-def _seed_groups(db_session):
-    """Insert trade groups for analytics tests."""
-    group1 = TradeGroup(
-        id=uuid.uuid4(),
-        account_id="U1234567",
-        symbol="AAPL",
-        asset_class="stock",
-        direction="long",
-        status="closed",
-        realized_pnl=Decimal("500.00"),
-        opened_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
-        closed_at=datetime(2025, 1, 15, 14, 0, 0, tzinfo=timezone.utc),
-        strategy_tag="momentum",
-    )
-    group2 = TradeGroup(
-        id=uuid.uuid4(),
-        account_id="U1234567",
-        symbol="MSFT",
-        asset_class="stock",
-        direction="long",
-        status="closed",
-        realized_pnl=Decimal("-250.00"),
-        opened_at=datetime(2025, 1, 16, 10, 0, 0, tzinfo=timezone.utc),
-        closed_at=datetime(2025, 1, 16, 14, 0, 0, tzinfo=timezone.utc),
-        strategy_tag="mean_reversion",
-    )
-    db_session.add_all([group1, group2])
-    db_session.flush()
-    return [group1, group2]
 
 
 # ===========================================================================
@@ -102,32 +36,32 @@ class TestTradeServiceListTrades:
         assert result.total == 0
         assert result.trades == []
 
-    def test_list_trades_paginated(self, db_session):
+    def test_list_trades_paginated(self, db_session, seed_trades):
         """list_trades should respect page and per_page."""
-        _seed_trades(db_session, 10)
+        seed_trades(count=10, exec_prefix="SVC")
         svc = TradeService()
         result = svc.list_trades(db_session, page=1, per_page=3)
         assert len(result.trades) == 3
         assert result.total == 10
 
-    def test_list_trades_filter_symbol(self, db_session):
+    def test_list_trades_filter_symbol(self, db_session, seed_trades):
         """Filtering by symbol should return only matching trades."""
-        _seed_trades(db_session, 9)
+        seed_trades(count=9, exec_prefix="SVC")
         svc = TradeService()
         result = svc.list_trades(db_session, symbol="AAPL")
         for trade in result.trades:
             assert trade.symbol == "AAPL"
 
-    def test_list_trades_filter_broker(self, db_session):
+    def test_list_trades_filter_broker(self, db_session, seed_trades):
         """Filtering by broker should return only matching trades."""
-        _seed_trades(db_session, 5)
+        seed_trades(count=5, exec_prefix="SVC")
         svc = TradeService()
         result = svc.list_trades(db_session, broker="ibkr")
         assert result.total == 5
 
-    def test_list_trades_sort_asc(self, db_session):
+    def test_list_trades_sort_asc(self, db_session, seed_trades):
         """Sorting ascending by executed_at should return oldest first."""
-        _seed_trades(db_session, 5)
+        seed_trades(count=5, exec_prefix="SVC")
         svc = TradeService()
         result = svc.list_trades(db_session, sort="executed_at", order="asc")
         if len(result.trades) >= 2:
@@ -137,9 +71,9 @@ class TestTradeServiceListTrades:
 class TestTradeServiceGetTrade:
     """Test TradeService.get_trade."""
 
-    def test_get_existing_trade(self, db_session):
+    def test_get_existing_trade(self, db_session, seed_trades):
         """Should return the trade when it exists."""
-        trades = _seed_trades(db_session, 1)
+        trades = seed_trades(count=1, exec_prefix="SVC")
         svc = TradeService()
         result = svc.get_trade(db_session, trades[0].id)
         assert result is not None
@@ -155,9 +89,9 @@ class TestTradeServiceGetTrade:
 class TestTradeServiceGetSummary:
     """Test TradeService.get_summary."""
 
-    def test_summary_with_trades(self, db_session):
+    def test_summary_with_trades(self, db_session, seed_trades):
         """Summary should return correct aggregates."""
-        _seed_trades(db_session, 5)
+        seed_trades(count=5, exec_prefix="SVC")
         svc = TradeService()
         result = svc.get_summary(db_session)
         assert result.total_trades == 5
@@ -169,9 +103,9 @@ class TestTradeServiceGetSummary:
         result = svc.get_summary(db_session)
         assert result.total_trades == 0
 
-    def test_summary_filter_symbol(self, db_session):
+    def test_summary_filter_symbol(self, db_session, seed_trades):
         """Summary filtered by symbol should only count matching trades."""
-        _seed_trades(db_session, 9)
+        seed_trades(count=9, exec_prefix="SVC")
         svc = TradeService()
         result = svc.get_summary(db_session, symbol="AAPL")
         assert result.total_trades > 0
@@ -256,9 +190,9 @@ class TestAnalyticsServiceDaily:
         result = svc.execute(views["daily"], db_session)
         assert result == []
 
-    def test_daily_summaries_with_data(self, db_session):
+    def test_daily_summaries_with_data(self, db_session, seed_trades):
         """Should return summaries when trades exist."""
-        _seed_trades(db_session, 5)
+        seed_trades(count=5, exec_prefix="SVC")
         svc = AnalyticsService()
         views = get_views()
         result = svc.execute(views["daily"], db_session)
@@ -279,10 +213,10 @@ class TestAnalyticsServiceCalendar:
 class TestAnalyticsServiceBySymbol:
     """Test AnalyticsService.execute for by-symbol view."""
 
-    def test_by_symbol_with_groups(self, db_session):
+    def test_by_symbol_with_groups(self, db_session, seed_trades, seed_trade_groups):
         """Should return per-symbol breakdown when groups exist."""
-        _seed_trades(db_session, 5)
-        _seed_groups(db_session)
+        seed_trades(count=5, exec_prefix="SVC")
+        seed_trade_groups()
         svc = AnalyticsService()
         views = get_views()
         result = svc.execute(views["by-symbol"], db_session)
@@ -292,10 +226,10 @@ class TestAnalyticsServiceBySymbol:
 class TestAnalyticsServicePerformance:
     """Test AnalyticsService.execute for performance view."""
 
-    def test_performance_with_data(self, db_session):
+    def test_performance_with_data(self, db_session, seed_trades, seed_trade_groups):
         """Should return performance metrics when data exists."""
-        _seed_trades(db_session, 5)
-        _seed_groups(db_session)
+        seed_trades(count=5, exec_prefix="SVC")
+        seed_trade_groups()
         svc = AnalyticsService()
         views = get_views()
         result = svc.execute(views["performance"], db_session)

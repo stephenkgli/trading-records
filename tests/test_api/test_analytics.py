@@ -11,79 +11,8 @@ Verifies the 5 analytics endpoints:
 Reference: design-doc-final.md Section 6.1
 """
 
-import uuid
-from datetime import datetime, timezone
-from decimal import Decimal
 
 import pytest
-
-from backend.models.trade import Trade
-from backend.models.trade_group import TradeGroup
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _seed_analytics_data(db_session):
-    """Seed database with trades and groups for analytics tests."""
-    trades_data = [
-        {"symbol": "AAPL", "side": "buy", "price": "150.00", "quantity": "100",
-         "executed_at": datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)},
-        {"symbol": "AAPL", "side": "sell", "price": "155.00", "quantity": "100",
-         "executed_at": datetime(2025, 1, 15, 14, 0, 0, tzinfo=timezone.utc)},
-        {"symbol": "MSFT", "side": "buy", "price": "400.00", "quantity": "50",
-         "executed_at": datetime(2025, 1, 16, 10, 0, 0, tzinfo=timezone.utc)},
-        {"symbol": "MSFT", "side": "sell", "price": "395.00", "quantity": "50",
-         "executed_at": datetime(2025, 1, 16, 14, 0, 0, tzinfo=timezone.utc)},
-    ]
-
-    for i, td in enumerate(trades_data):
-        trade = Trade(
-            id=uuid.uuid4(),
-            broker="ibkr",
-            broker_exec_id=f"ANALYTICS{i:04d}",
-            account_id="U1234567",
-            symbol=td["symbol"],
-            asset_class="stock",
-            side=td["side"],
-            quantity=Decimal(td["quantity"]),
-            price=Decimal(td["price"]),
-            commission=Decimal("1.00"),
-            executed_at=td["executed_at"],
-            currency="USD",
-            raw_data={},
-        )
-        db_session.add(trade)
-
-    # Create trade groups
-    group1 = TradeGroup(
-        id=uuid.uuid4(),
-        account_id="U1234567",
-        symbol="AAPL",
-        asset_class="stock",
-        direction="long",
-        status="closed",
-        realized_pnl=Decimal("500.00"),
-        opened_at=datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
-        closed_at=datetime(2025, 1, 15, 14, 0, 0, tzinfo=timezone.utc),
-        strategy_tag="momentum",
-    )
-    group2 = TradeGroup(
-        id=uuid.uuid4(),
-        account_id="U1234567",
-        symbol="MSFT",
-        asset_class="stock",
-        direction="long",
-        status="closed",
-        realized_pnl=Decimal("-250.00"),
-        opened_at=datetime(2025, 1, 16, 10, 0, 0, tzinfo=timezone.utc),
-        closed_at=datetime(2025, 1, 16, 14, 0, 0, tzinfo=timezone.utc),
-        strategy_tag="mean_reversion",
-    )
-
-    db_session.add_all([group1, group2])
-    db_session.flush()
 
 
 # ===========================================================================
@@ -93,24 +22,24 @@ def _seed_analytics_data(db_session):
 class TestAnalyticsDaily:
     """Test GET /api/v1/analytics/daily endpoint."""
 
-    def test_daily_returns_200(self, client, auth_headers, db_session):
+    def test_daily_returns_200(self, client, auth_headers, db_session, seed_analytics_data):
         """Daily analytics endpoint should return 200."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/daily", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_daily_with_date_range(self, client, auth_headers, db_session):
+    def test_daily_with_date_range(self, client, auth_headers, db_session, seed_analytics_data):
         """Should filter by date range."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get(
             "/api/v1/analytics/daily?from=2025-01-15&to=2025-01-16",
             headers=auth_headers,
         )
         assert response.status_code == 200
 
-    def test_daily_returns_expected_values(self, client, auth_headers, db_session):
+    def test_daily_returns_expected_values(self, client, auth_headers, db_session, seed_analytics_data):
         """Daily summaries should fall back to trades in SQLite and compute P&L."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/daily", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -144,9 +73,9 @@ class TestAnalyticsDaily:
 class TestAnalyticsCalendar:
     """Test GET /api/v1/analytics/calendar endpoint."""
 
-    def test_calendar_returns_200(self, client, auth_headers, db_session):
+    def test_calendar_returns_200(self, client, auth_headers, db_session, seed_analytics_data):
         """Calendar endpoint should return 200 with year and month."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get(
             "/api/v1/analytics/calendar?year=2025&month=1",
             headers=auth_headers,
@@ -177,15 +106,15 @@ class TestAnalyticsCalendar:
 class TestAnalyticsBySymbol:
     """Test GET /api/v1/analytics/by-symbol endpoint."""
 
-    def test_by_symbol_returns_200(self, client, auth_headers, db_session):
+    def test_by_symbol_returns_200(self, client, auth_headers, db_session, seed_analytics_data):
         """By-symbol endpoint should return 200."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/by-symbol", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_by_symbol_with_date_filter(self, client, auth_headers, db_session):
+    def test_by_symbol_with_date_filter(self, client, auth_headers, db_session, seed_analytics_data):
         """Should support date range filtering."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get(
             "/api/v1/analytics/by-symbol?from=2025-01-15&to=2025-01-15",
             headers=auth_headers,
@@ -200,9 +129,9 @@ class TestAnalyticsBySymbol:
 class TestAnalyticsByStrategy:
     """Test GET /api/v1/analytics/by-strategy endpoint."""
 
-    def test_by_strategy_returns_200(self, client, auth_headers, db_session):
+    def test_by_strategy_returns_200(self, client, auth_headers, db_session, seed_analytics_data):
         """By-strategy endpoint should return 200."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/by-strategy", headers=auth_headers)
         assert response.status_code == 200
 
@@ -214,15 +143,15 @@ class TestAnalyticsByStrategy:
 class TestAnalyticsPerformance:
     """Test GET /api/v1/analytics/performance endpoint."""
 
-    def test_performance_returns_200(self, client, auth_headers, db_session):
+    def test_performance_returns_200(self, client, auth_headers, db_session, seed_analytics_data):
         """Performance endpoint should return 200."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/performance", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_performance_returns_expected_metrics(self, client, auth_headers, db_session):
+    def test_performance_returns_expected_metrics(self, client, auth_headers, db_session, seed_analytics_data):
         """Performance metrics should reflect trade_groups and daily summaries."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get("/api/v1/analytics/performance", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -245,9 +174,9 @@ class TestAnalyticsPerformance:
         response = client.get("/api/v1/analytics/performance", headers=auth_headers)
         assert response.status_code == 200
 
-    def test_performance_with_date_filter(self, client, auth_headers, db_session):
+    def test_performance_with_date_filter(self, client, auth_headers, db_session, seed_analytics_data):
         """Performance metrics should support date range filtering."""
-        _seed_analytics_data(db_session)
+        seed_analytics_data()
         response = client.get(
             "/api/v1/analytics/performance?from=2025-01-15&to=2025-01-17",
             headers=auth_headers,

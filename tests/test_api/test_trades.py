@@ -14,45 +14,9 @@ Reference: design-doc-final.md Sections 6.1, 6.2
 """
 
 import uuid
-from datetime import datetime, timezone
-from decimal import Decimal
+from datetime import datetime
 
 import pytest
-
-from backend.models.trade import Trade
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _seed_trades(db_session, count=20):
-    """Insert test trades into the database and return them."""
-    trades = []
-    symbols = ["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"]
-    brokers = ["ibkr", "tradovate"]
-
-    for i in range(count):
-        trade = Trade(
-            id=uuid.uuid4(),
-            broker=brokers[i % 2],
-            broker_exec_id=f"SEED{i:04d}",
-            account_id="U1234567",
-            symbol=symbols[i % len(symbols)],
-            asset_class="stock",
-            side="buy" if i % 2 == 0 else "sell",
-            quantity=Decimal("100"),
-            price=Decimal(f"{150 + i}.00"),
-            commission=Decimal("1.00"),
-            executed_at=datetime(2025, 1, 15 + (i % 15), 10, i % 60, 0, tzinfo=timezone.utc),
-            currency="USD",
-            raw_data={"seed": i},
-        )
-        trades.append(trade)
-        db_session.add(trade)
-
-    db_session.flush()
-    return trades
 
 
 # ===========================================================================
@@ -62,9 +26,14 @@ def _seed_trades(db_session, count=20):
 class TestTradesPagination:
     """Test pagination of the trades list endpoint."""
 
-    def test_default_pagination(self, client, auth_headers, db_session):
+    def test_default_pagination(self, client, auth_headers, db_session, seed_trades):
         """Default pagination should return a paginated response."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades", headers=auth_headers)
         assert response.status_code == 200
@@ -76,18 +45,28 @@ class TestTradesPagination:
         assert "per_page" in data
         assert len(data["trades"]) <= data["per_page"]
 
-    def test_custom_page_size(self, client, auth_headers, db_session):
+    def test_custom_page_size(self, client, auth_headers, db_session, seed_trades):
         """Custom per_page should limit results."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades?per_page=5", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert len(data["trades"]) <= 5
 
-    def test_page_2(self, client, auth_headers, db_session):
+    def test_page_2(self, client, auth_headers, db_session, seed_trades):
         """Page 2 should return different results than page 1."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         resp1 = client.get("/api/v1/trades?page=1&per_page=5", headers=auth_headers)
         resp2 = client.get("/api/v1/trades?page=2&per_page=5", headers=auth_headers)
@@ -115,9 +94,14 @@ class TestTradesPagination:
 class TestTradesFiltering:
     """Test filtering of trades."""
 
-    def test_filter_by_symbol(self, client, auth_headers, db_session):
+    def test_filter_by_symbol(self, client, auth_headers, db_session, seed_trades):
         """Filtering by symbol should return only matching trades."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades?symbol=AAPL", headers=auth_headers)
         assert response.status_code == 200
@@ -126,9 +110,14 @@ class TestTradesFiltering:
         for trade in data["trades"]:
             assert trade["symbol"] == "AAPL"
 
-    def test_filter_by_broker(self, client, auth_headers, db_session):
+    def test_filter_by_broker(self, client, auth_headers, db_session, seed_trades):
         """Filtering by broker should return only matching trades."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades?broker=ibkr", headers=auth_headers)
         assert response.status_code == 200
@@ -137,9 +126,14 @@ class TestTradesFiltering:
         for trade in data["trades"]:
             assert trade["broker"] == "ibkr"
 
-    def test_filter_by_date_range(self, client, auth_headers, db_session):
+    def test_filter_by_date_range(self, client, auth_headers, db_session, seed_trades):
         """Filtering by date range should return only trades within the range."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get(
             "/api/v1/trades?from=2025-01-15T00:00:00Z&to=2025-01-17T23:59:59Z",
@@ -153,9 +147,14 @@ class TestTradesFiltering:
             assert dt.date() >= datetime(2025, 1, 15).date()
             assert dt.date() <= datetime(2025, 1, 17).date()
 
-    def test_filter_by_asset_class(self, client, auth_headers, db_session):
+    def test_filter_by_asset_class(self, client, auth_headers, db_session, seed_trades):
         """Filtering by asset_class should return matching trades."""
-        _seed_trades(db_session, 20)
+        seed_trades(
+            count=20,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades?asset_class=stock", headers=auth_headers)
         assert response.status_code == 200
@@ -172,9 +171,14 @@ class TestTradesFiltering:
 class TestTradesSorting:
     """Test sorting of trade results."""
 
-    def test_sort_by_executed_at_desc(self, client, auth_headers, db_session):
+    def test_sort_by_executed_at_desc(self, client, auth_headers, db_session, seed_trades):
         """Sorting by executed_at descending should return newest first."""
-        _seed_trades(db_session, 10)
+        seed_trades(
+            count=10,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get(
             "/api/v1/trades?sort=executed_at&order=desc",
@@ -187,9 +191,14 @@ class TestTradesSorting:
             dates = [t["executed_at"] for t in data["trades"]]
             assert dates == sorted(dates, reverse=True)
 
-    def test_sort_by_executed_at_asc(self, client, auth_headers, db_session):
+    def test_sort_by_executed_at_asc(self, client, auth_headers, db_session, seed_trades):
         """Sorting by executed_at ascending should return oldest first."""
-        _seed_trades(db_session, 10)
+        seed_trades(
+            count=10,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get(
             "/api/v1/trades?sort=executed_at&order=asc",
@@ -210,9 +219,14 @@ class TestTradesSorting:
 class TestTradesSummary:
     """Test aggregated trades summary endpoint."""
 
-    def test_summary_returns_aggregates(self, client, auth_headers, db_session):
+    def test_summary_returns_aggregates(self, client, auth_headers, db_session, seed_trades):
         """Summary should return aggregate fields with non-empty data."""
-        _seed_trades(db_session, 6)
+        seed_trades(
+            count=6,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get("/api/v1/trades/summary", headers=auth_headers)
         assert response.status_code == 200
@@ -224,9 +238,14 @@ class TestTradesSummary:
         assert "gross_pnl" in data
         assert "net_pnl" in data
 
-    def test_summary_respects_filters(self, client, auth_headers, db_session):
+    def test_summary_respects_filters(self, client, auth_headers, db_session, seed_trades):
         """Summary filters should restrict the aggregation scope."""
-        _seed_trades(db_session, 10)
+        seed_trades(
+            count=10,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
 
         response = client.get(
             "/api/v1/trades/summary?symbol=AAPL&broker=ibkr",
@@ -249,9 +268,14 @@ class TestTradesSummary:
 class TestTradeDetail:
     """Test the single trade detail endpoint."""
 
-    def test_get_trade_by_id(self, client, auth_headers, db_session):
+    def test_get_trade_by_id(self, client, auth_headers, db_session, seed_trades):
         """GET /api/v1/trades/:id should return the specific trade."""
-        trades = _seed_trades(db_session, 5)
+        trades = seed_trades(
+            count=5,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
         trade_id = str(trades[0].id)
 
         response = client.get(f"/api/v1/trades/{trade_id}", headers=auth_headers)
@@ -265,9 +289,14 @@ class TestTradeDetail:
         response = client.get(f"/api/v1/trades/{fake_id}", headers=auth_headers)
         assert response.status_code == 404
 
-    def test_trade_detail_fields(self, client, auth_headers, db_session):
+    def test_trade_detail_fields(self, client, auth_headers, db_session, seed_trades):
         """Trade detail should include all expected fields."""
-        trades = _seed_trades(db_session, 1)
+        trades = seed_trades(
+            count=1,
+            symbols=["AAPL", "MSFT", "GOOG", "TSLA", "AMZN"],
+            brokers=["ibkr", "tradovate"],
+            exec_prefix="SEED",
+        )
         trade_id = str(trades[0].id)
 
         response = client.get(f"/api/v1/trades/{trade_id}", headers=auth_headers)
