@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from datetime import date, datetime
 from decimal import Decimal
@@ -12,25 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
-
-# CME期货月份代码: F=1月, G=2月, H=3月, J=4月, K=5月, M=6月,
-#                  N=7月, Q=8月, U=9月, V=10月, X=11月, Z=12月
-_FUTURES_SYMBOL_RE = re.compile(r'^(.+?)[FGHJKMNQUVXZ]\d{1,2}$')
-
-
-def normalize_futures_symbol(symbol: str, asset_class: str | None = None) -> str:
-    """将期货品种归一化为基础品种名。
-
-    例如 MESU5 -> MES, MESH5 -> MES, ESZ24 -> ES, NQH5 -> NQ。
-    仅对 asset_class 为 'future' 的品种生效，其他品种原样返回。
-    如果未提供 asset_class，则尝试按正则匹配。
-    """
-    if asset_class and asset_class != 'future':
-        return symbol
-    m = _FUTURES_SYMBOL_RE.match(symbol)
-    if m:
-        return m.group(1)
-    return symbol
+from backend.utils.symbol import normalize_futures_symbol
 
 logger = structlog.get_logger(__name__)
 

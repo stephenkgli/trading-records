@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -16,6 +16,7 @@ from backend.models.trade_group import TradeGroup, TradeGroupLeg
 from backend.schemas.trade import TradeResponse
 from backend.services.trade_grouper import recompute_groups
 from backend.services.analytics import refresh_daily_summaries
+from backend.utils.symbol import normalize_futures_symbol
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
@@ -43,6 +44,12 @@ class TradeGroupResponse(BaseModel):
     opened_at: datetime
     closed_at: datetime | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def _normalize_symbol(self) -> "TradeGroupResponse":
+        """对期货品种 symbol 进行归一化（如 MESZ5 -> MES）。"""
+        self.symbol = normalize_futures_symbol(self.symbol, self.asset_class)
+        return self
 
 
 class TradeGroupDetailResponse(TradeGroupResponse):
