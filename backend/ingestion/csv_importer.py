@@ -133,6 +133,57 @@ class CSVImporter(BaseIngester):
 
         return CSVFormat.UNKNOWN
 
+    def _parse_rows(
+        self,
+        text: str,
+        filename: str,
+        normalize_fn,
+        *,
+        log_event: str,
+        error_event: str,
+    ) -> list[NormalizedTrade]:
+        """Shared DictReader parse loop for CSV formats.
+
+        Iterates rows from a ``csv.DictReader``, calls *normalize_fn* for each
+        row, collects results, and logs parse errors per row.
+
+        *normalize_fn* signature: ``(record, filename, row_number) -> NormalizedTrade | list[NormalizedTrade] | None``
+
+        Args:
+            text: Raw CSV text.
+            filename: Original filename (for logging and dedup hashing).
+            normalize_fn: Row normalizer callable.
+            log_event: Structured log event name on successful parse.
+            error_event: Structured log event name on per-row errors.
+
+        Returns:
+            Flat list of ``NormalizedTrade`` objects.
+        """
+        trades: list[NormalizedTrade] = []
+        reader = csv.DictReader(io.StringIO(text))
+        row_number = 0
+
+        for row in reader:
+            row_number += 1
+            try:
+                result = normalize_fn(row, filename, row_number)
+                if result is None:
+                    continue
+                if isinstance(result, list):
+                    trades.extend(result)
+                else:
+                    trades.append(result)
+            except Exception as e:
+                logger.warning(
+                    error_event,
+                    filename=filename,
+                    row=row_number,
+                    error=str(e),
+                )
+
+        logger.info(log_event, filename=filename, trade_count=len(trades))
+        return trades
+
     def _parse_ibkr_csv(self, text: str, filename: str) -> list[NormalizedTrade]:
         """Parse IBKR Activity Statement CSV.
 
@@ -305,29 +356,12 @@ class CSVImporter(BaseIngester):
         Tradovate CSVs typically have columns like:
         orderId, execId, contractName, b/s, qty, price, ...
         """
-        trades: list[NormalizedTrade] = []
-
-        reader = csv.DictReader(io.StringIO(text))
-        row_number = 0
-
-        for row in reader:
-            row_number += 1
-            try:
-                trade = self._normalize_tradovate_csv_row(row, filename, row_number)
-                if trade:
-                    trades.append(trade)
-            except Exception as e:
-                logger.warning(
-                    "tradovate_csv_parse_error",
-                    filename=filename,
-                    row=row_number,
-                    error=str(e),
-                )
-
-        logger.info(
-            "tradovate_csv_parsed", filename=filename, trade_count=len(trades)
+        return self._parse_rows(
+            text, filename,
+            self._normalize_tradovate_csv_row,
+            log_event="tradovate_csv_parsed",
+            error_event="tradovate_csv_parse_error",
         )
-        return trades
 
     def _normalize_tradovate_csv_row(
         self, record: dict, filename: str, row_number: int
@@ -414,26 +448,11 @@ class CSVImporter(BaseIngester):
         Each row represents a completed round-trip trade. We split it into
         two NormalizedTrade records (buy + sell).
         """
-        trades: list[NormalizedTrade] = []
-
-        reader = csv.DictReader(io.StringIO(text))
-        row_number = 0
-
-        for row in reader:
-            row_number += 1
-            try:
-                pair = self._normalize_tradovate_perf_row(row, filename, row_number)
-                trades.extend(pair)
-            except Exception as e:
-                logger.warning(
-                    "tradovate_perf_csv_parse_error",
-                    filename=filename,
-                    row=row_number,
-                    error=str(e),
-                )
-
-        logger.info(
-            "tradovate_perf_csv_parsed", filename=filename, trade_count=len(trades)
+        trades = self._parse_rows(
+            text, filename,
+            self._normalize_tradovate_perf_row,
+            log_event="tradovate_perf_csv_parsed",
+            error_event="tradovate_perf_csv_parse_error",
         )
 
         # 第二轮：对 multiplier 为 1（无法从 price_diff 推断）的 trade，

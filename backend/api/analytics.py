@@ -27,6 +27,19 @@ from backend.services.analytics_service import AnalyticsService
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
+def _parse_asset_classes(raw: str | None) -> list[str] | None:
+    """Parse a comma-separated asset_classes query parameter.
+
+    Semantics:
+    - ``None`` (parameter omitted) -> ``None`` (no filter, query all).
+    - ``""`` (empty string passed) -> ``[]`` (empty list, return empty results).
+    - ``"stock,future"`` -> ``["stock", "future"]`` (filter by these types).
+    """
+    if raw is None:
+        return None
+    return [s.strip().lower() for s in raw.split(",") if s.strip()]
+
+
 def _make_date_range_handler(view: AnalyticsViewDef):
     """Create a FastAPI handler for a standard date-range view."""
     resp_model = list[view.schema] if view.is_list else view.schema
@@ -41,12 +54,7 @@ def _make_date_range_handler(view: AnalyticsViewDef):
         service: AnalyticsService = Depends(get_analytics_service),
     ):
         # 将逗号分隔的 asset_classes 字符串解析为列表
-        # None: 未传参 → 不过滤（查询全部）
-        # "": 传了空字符串 → 空列表 → 返回空结果
-        # "stock,future": 传了具体值 → 按资产类型过滤
-        asset_class_list: list[str] | None = None
-        if asset_classes is not None:
-            asset_class_list = [s.strip().lower() for s in asset_classes.split(",") if s.strip()]
+        asset_class_list = _parse_asset_classes(asset_classes)
         return service.execute(
             view, db,
             from_date=from_date, to_date=to_date, account_id=account_id,

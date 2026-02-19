@@ -118,14 +118,23 @@ class ImportService:
         log_ids = [log.id for log in logs]
         trade_stats: dict = {}
         if log_ids:
+            dialect_name = db.bind.dialect.name if db.bind else ""
+            if dialect_name == "postgresql":
+                brokers_col = func.string_agg(
+                    func.distinct(Trade.broker), ", "
+                ).label("brokers")
+            else:
+                # SQLite: group_concat(DISTINCT x) only accepts one arg;
+                # default separator is ',' so we replace to match PG output.
+                brokers_col = func.replace(
+                    func.group_concat(Trade.broker.distinct()), ",", ", "
+                ).label("brokers")
             stats_query = (
                 select(
                     Trade.import_log_id,
                     func.min(Trade.executed_at).label("date_from"),
                     func.max(Trade.executed_at).label("date_to"),
-                    func.string_agg(
-                        func.distinct(Trade.broker), ", "
-                    ).label("brokers"),
+                    brokers_col,
                 )
                 .where(Trade.import_log_id.in_(log_ids))
                 .group_by(Trade.import_log_id)

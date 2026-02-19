@@ -13,6 +13,7 @@ export {
   fetchCalendar,
   fetchBySymbol,
   fetchPerformance,
+  fetchAvailableAssetClasses,
 } from "./analytics";
 export {
   fetchGroups,

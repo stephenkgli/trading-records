@@ -11,9 +11,79 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
+from backend.utils.db import session_scope
 from backend.utils.symbol import normalize_futures_symbol
 
 logger = structlog.get_logger(__name__)
+
+# Sentinel indicating the caller should return an empty result immediately.
+_EMPTY = object()
+
+
+def _check_empty_asset_classes(asset_classes: list[str] | None) -> object | None:
+    """Return ``_EMPTY`` if *asset_classes* is an explicit empty list.
+
+    An empty list ``[]`` means the user deliberately selected no asset types,
+    so the caller should short-circuit to an empty/zero-value result.
+    ``None`` means the parameter was omitted (no filter).
+    """
+    if asset_classes is not None and len(asset_classes) == 0:
+        return _EMPTY
+    return None
+
+
+def _build_asset_class_in_clause(
+    asset_classes: list[str],
+    prefix: str = "ac",
+) -> tuple[str, dict]:
+    """Build a SQL ``IN (...)`` placeholder fragment and matching params dict.
+
+    Args:
+        asset_classes: Non-empty list of asset class strings.
+        prefix: Bind-parameter name prefix (must be unique per query context).
+
+    Returns:
+        Tuple of ``(placeholders_sql, params_dict)``
+        e.g. ``(":ac_0, :ac_1", {"ac_0": "stock", "ac_1": "future"})``.
+    """
+    placeholders = ", ".join(f":{prefix}_{i}" for i in range(len(asset_classes)))
+    params = {f"{prefix}_{i}": ac for i, ac in enumerate(asset_classes)}
+    return placeholders, params
+
+
+def _append_date_account_filters(
+    query: str,
+    params: dict,
+    *,
+    date_col: str,
+    account_col: str,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    account_id: str | None = None,
+) -> str:
+    """Append date-range and account_id WHERE clauses to a raw SQL query.
+
+    Mutates *params* in-place and returns the updated query string.
+
+    Args:
+        query: SQL query string being built.
+        params: Bind-parameter dict (mutated in-place).
+        date_col: SQL expression for the date column.
+        account_col: SQL expression for the account column.
+        from_date: Optional inclusive lower date bound.
+        to_date: Optional inclusive upper date bound.
+        account_id: Optional account ID equality filter.
+    """
+    if from_date:
+        query += f" AND {date_col} >= :from_date"
+        params["from_date"] = from_date
+    if to_date:
+        query += f" AND {date_col} <= :to_date"
+        params["to_date"] = to_date
+    if account_id:
+        query += f" AND {account_col} = :account_id"
+        params["account_id"] = account_id
+    return query
 
 
 def _sqlite_safe_params(db: Session, params: dict) -> dict:
@@ -38,29 +108,15 @@ def _sqlite_safe_params(db: Session, params: dict) -> dict:
 
 def refresh_daily_summaries(db: Session | None = None) -> None:
     """Refresh the daily_summaries materialized view concurrently."""
-    own_session = db is None
-    if own_session:
-        db = SessionLocal()
-    try:
-        db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY daily_summaries"))
-        if own_session:
-            db.commit()
-        logger.info("daily_summaries_refreshed")
-    except Exception as e:
-        logger.error("daily_summaries_refresh_error", error=str(e))
-        # If CONCURRENTLY fails (e.g., no unique index populated), try without
+    with session_scope(db) as session:
         try:
-            db.execute(text("REFRESH MATERIALIZED VIEW daily_summaries"))
-            if own_session:
-                db.commit()
+            session.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY daily_summaries"))
+            logger.info("daily_summaries_refreshed")
+        except Exception as e:
+            logger.error("daily_summaries_refresh_error", error=str(e))
+            # If CONCURRENTLY fails (e.g., no unique index populated), try without
+            session.execute(text("REFRESH MATERIALIZED VIEW daily_summaries"))
             logger.info("daily_summaries_refreshed_non_concurrent")
-        except Exception:
-            if own_session:
-                db.rollback()
-            raise
-    finally:
-        if own_session:
-            db.close()
 
 
 def get_daily_summaries(
@@ -86,8 +142,7 @@ def _get_daily_summaries_from_view_or_trades(
 ) -> list[dict]:
     """Fetch daily summaries, falling back to raw trades when the view is unavailable."""
 
-    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回空结果
-    if asset_classes is not None and len(asset_classes) == 0:
+    if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return []
 
     # 如果指定了资产类型过滤，视图中没有 asset_class 字段，直接使用 trade_groups 计算
@@ -100,15 +155,11 @@ def _get_daily_summaries_from_view_or_trades(
     query = "SELECT * FROM daily_summaries WHERE 1=1"
     params: dict = {}
 
-    if from_date:
-        query += " AND date >= :from_date"
-        params["from_date"] = from_date
-    if to_date:
-        query += " AND date <= :to_date"
-        params["to_date"] = to_date
-    if account_id:
-        query += " AND account_id = :account_id"
-        params["account_id"] = account_id
+    query = _append_date_account_filters(
+        query, params,
+        date_col="date", account_col="account_id",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
 
     query += " ORDER BY date ASC"
     params = _sqlite_safe_params(db, params)
@@ -178,15 +229,12 @@ def _compute_daily_summaries_from_trades(
             account_id=account_id,
         )
 
-    if from_date:
-        query += " AND COALESCE(g_agg.date, t_agg.date) >= :from_date"
-        params["from_date"] = from_date
-    if to_date:
-        query += " AND COALESCE(g_agg.date, t_agg.date) <= :to_date"
-        params["to_date"] = to_date
-    if account_id:
-        query += " AND COALESCE(g_agg.account_id, t_agg.account_id) = :account_id"
-        params["account_id"] = account_id
+    query = _append_date_account_filters(
+        query, params,
+        date_col="COALESCE(g_agg.date, t_agg.date)",
+        account_col="COALESCE(g_agg.account_id, t_agg.account_id)",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
 
     query += " ORDER BY date ASC"
     params = _sqlite_safe_params(db, params)
@@ -223,8 +271,7 @@ def get_by_symbol(
 
     期货品种会被归一化（如 MESU5, MESH5 -> MES），然后按归一化后的名称聚合。
     """
-    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回空结果
-    if asset_classes is not None and len(asset_classes) == 0:
+    if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return []
 
     query = """
@@ -270,10 +317,9 @@ def get_by_symbol(
     if account_id:
         query += " AND tg.account_id = :account_id"
     if asset_classes:
-        placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
-        query += f" AND tg.asset_class IN ({placeholders})"
-        for i, ac in enumerate(asset_classes):
-            params[f"ac_{i}"] = ac
+        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes)
+        query += f" AND tg.asset_class IN ({ac_sql})"
+        params.update(ac_params)
 
     query += " GROUP BY tg.symbol, tg.asset_class, trade_counts.cnt ORDER BY net_pnl DESC"
     params = _sqlite_safe_params(db, params)
@@ -344,8 +390,7 @@ def _compute_daily_summaries_filtered_by_asset_classes(
 
     asset_class 可以直接在 SQL 层过滤，无需 Python 层归一化。
     """
-    # 构建 asset_class IN 子句
-    ac_placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
+    ac_sql, params = _build_asset_class_in_clause(asset_classes)
 
     query = f"""
         SELECT
@@ -366,7 +411,7 @@ def _compute_daily_summaries_filtered_by_asset_classes(
                 SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
             FROM trade_groups tg
             WHERE tg.status = 'closed'
-              AND tg.asset_class IN ({ac_placeholders})
+              AND tg.asset_class IN ({ac_sql})
             GROUP BY DATE(tg.closed_at), tg.account_id
         ) g_agg
         FULL OUTER JOIN (
@@ -376,24 +421,17 @@ def _compute_daily_summaries_filtered_by_asset_classes(
                 SUM(ABS(t.commission)) AS commissions,
                 COUNT(*) AS trade_count
             FROM trades t
-            WHERE t.asset_class IN ({ac_placeholders})
+            WHERE t.asset_class IN ({ac_sql})
             GROUP BY DATE(t.executed_at), t.account_id
         ) t_agg ON g_agg.date = t_agg.date AND g_agg.account_id = t_agg.account_id
         WHERE 1=1
     """
-    params: dict = {}
-    for i, ac in enumerate(asset_classes):
-        params[f"ac_{i}"] = ac
-
-    if from_date:
-        query += " AND COALESCE(g_agg.date, t_agg.date) >= :from_date"
-        params["from_date"] = from_date
-    if to_date:
-        query += " AND COALESCE(g_agg.date, t_agg.date) <= :to_date"
-        params["to_date"] = to_date
-    if account_id:
-        query += " AND COALESCE(g_agg.account_id, t_agg.account_id) = :account_id"
-        params["account_id"] = account_id
+    query = _append_date_account_filters(
+        query, params,
+        date_col="COALESCE(g_agg.date, t_agg.date)",
+        account_col="COALESCE(g_agg.account_id, t_agg.account_id)",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
 
     query += " ORDER BY date ASC"
     params = _sqlite_safe_params(db, params)
@@ -409,8 +447,7 @@ def _get_win_loss_from_groups(
     asset_classes: list[str] | None = None,
 ) -> dict:
     """从 trade_groups 表获取 win/loss count 及 avg_win/avg_loss（基于已关闭 round-trip 的 realized_pnl）。"""
-    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回零值
-    if asset_classes is not None and len(asset_classes) == 0:
+    if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return {"win_count": 0, "loss_count": 0, "avg_win": Decimal("0"), "avg_loss": Decimal("0")}
 
     query = """
@@ -424,20 +461,15 @@ def _get_win_loss_from_groups(
     """
     params: dict = {}
 
-    if from_date:
-        query += " AND DATE(tg.closed_at) >= :from_date"
-        params["from_date"] = from_date
-    if to_date:
-        query += " AND DATE(tg.closed_at) <= :to_date"
-        params["to_date"] = to_date
-    if account_id:
-        query += " AND tg.account_id = :account_id"
-        params["account_id"] = account_id
+    query = _append_date_account_filters(
+        query, params,
+        date_col="DATE(tg.closed_at)", account_col="tg.account_id",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
     if asset_classes:
-        placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
-        query += f" AND tg.asset_class IN ({placeholders})"
-        for i, ac in enumerate(asset_classes):
-            params[f"ac_{i}"] = ac
+        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes)
+        query += f" AND tg.asset_class IN ({ac_sql})"
+        params.update(ac_params)
 
     params = _sqlite_safe_params(db, params)
 
@@ -469,7 +501,7 @@ def get_performance_metrics(
     not from raw buy/sell amounts.
     """
     # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回零值结果
-    if asset_classes is not None and len(asset_classes) == 0:
+    if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return {
             "total_pnl": Decimal("0"),
             "total_commissions": Decimal("0"),
@@ -503,20 +535,15 @@ def get_performance_metrics(
         WHERE tg.status = 'closed'
     """
     pnl_params: dict = {}
-    if from_date:
-        pnl_query += " AND DATE(tg.closed_at) >= :from_date"
-        pnl_params["from_date"] = from_date
-    if to_date:
-        pnl_query += " AND DATE(tg.closed_at) <= :to_date"
-        pnl_params["to_date"] = to_date
-    if account_id:
-        pnl_query += " AND tg.account_id = :account_id"
-        pnl_params["account_id"] = account_id
+    pnl_query = _append_date_account_filters(
+        pnl_query, pnl_params,
+        date_col="DATE(tg.closed_at)", account_col="tg.account_id",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
     if asset_classes:
-        placeholders = ", ".join(f":pnl_ac_{i}" for i in range(len(asset_classes)))
-        pnl_query += f" AND tg.asset_class IN ({placeholders})"
-        for i, ac in enumerate(asset_classes):
-            pnl_params[f"pnl_ac_{i}"] = ac
+        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes, prefix="pnl_ac")
+        pnl_query += f" AND tg.asset_class IN ({ac_sql})"
+        pnl_params.update(ac_params)
 
     pnl_params = _sqlite_safe_params(db, pnl_params)
     pnl_row = db.execute(text(pnl_query), pnl_params).mappings().first()
@@ -532,20 +559,15 @@ def get_performance_metrics(
         WHERE 1=1
     """
     comm_params: dict = {}
-    if from_date:
-        comm_query += " AND DATE(t.executed_at) >= :from_date"
-        comm_params["from_date"] = from_date
-    if to_date:
-        comm_query += " AND DATE(t.executed_at) <= :to_date"
-        comm_params["to_date"] = to_date
-    if account_id:
-        comm_query += " AND t.account_id = :account_id"
-        comm_params["account_id"] = account_id
+    comm_query = _append_date_account_filters(
+        comm_query, comm_params,
+        date_col="DATE(t.executed_at)", account_col="t.account_id",
+        from_date=from_date, to_date=to_date, account_id=account_id,
+    )
     if asset_classes:
-        placeholders = ", ".join(f":comm_ac_{i}" for i in range(len(asset_classes)))
-        comm_query += f" AND t.asset_class IN ({placeholders})"
-        for i, ac in enumerate(asset_classes):
-            comm_params[f"comm_ac_{i}"] = ac
+        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes, prefix="comm_ac")
+        comm_query += f" AND t.asset_class IN ({ac_sql})"
+        comm_params.update(ac_params)
 
     comm_params = _sqlite_safe_params(db, comm_params)
     comm_row = db.execute(text(comm_query), comm_params).mappings().first()

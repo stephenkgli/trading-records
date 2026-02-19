@@ -22,3 +22,9 @@ export type {
   TradeGroupDetail,
   TradeGroupListResponse,
 } from "./groups";
+
+export type {
+  Trade,
+  TradeListResponse,
+  TradeFilters,
+} from "./trades";

@@ -6,6 +6,7 @@ Provides a single ``execute()`` method that looks up a registered
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from pydantic import BaseModel
@@ -27,9 +28,15 @@ class AnalyticsService:
         **params: Any,
     ) -> BaseModel | list[BaseModel]:
         """Execute an analytics view and return validated Pydantic model(s)."""
-        # 过滤掉值为 None 的参数，避免传递给不支持该参数的查询函数
-        filtered_params = {k: v for k, v in params.items() if v is not None}
-        raw = view.query_fn(db, **filtered_params)
+        # Only pass parameters the query function actually accepts,
+        # so callers can provide a superset without causing TypeErrors.
+        sig = inspect.signature(view.query_fn)
+        fn_params = sig.parameters
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in fn_params.values()):
+            accepted = params
+        else:
+            accepted = {k: v for k, v in params.items() if k in fn_params}
+        raw = view.query_fn(db, **accepted)
 
         if view.is_list:
             if view.row_converter:

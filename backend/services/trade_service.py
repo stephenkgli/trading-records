@@ -22,6 +22,45 @@ logger = structlog.get_logger(__name__)
 class TradeService:
     """Service for trade query operations."""
 
+    @staticmethod
+    def _apply_trade_filters(
+        query,
+        *,
+        account_id: str | None = None,
+        broker: str | None = None,
+        symbol: str | None = None,
+        asset_class: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ):
+        """Apply common trade filter predicates to a SQLAlchemy query.
+
+        Args:
+            query: A SQLAlchemy ``Select`` statement targeting ``Trade``.
+            account_id: Optional account ID filter.
+            broker: Optional broker filter.
+            symbol: Optional symbol filter.
+            asset_class: Optional asset class filter.
+            from_date: Optional start date filter (inclusive).
+            to_date: Optional end date filter (inclusive).
+
+        Returns:
+            The query with filter predicates applied.
+        """
+        if account_id:
+            query = query.where(Trade.account_id == account_id)
+        if broker:
+            query = query.where(Trade.broker == broker)
+        if symbol:
+            query = query.where(Trade.symbol == symbol)
+        if asset_class:
+            query = query.where(Trade.asset_class == asset_class)
+        if from_date:
+            query = query.where(Trade.executed_at >= from_date)
+        if to_date:
+            query = query.where(Trade.executed_at <= to_date)
+        return query
+
     def list_trades(
         self,
         db: Session,
@@ -56,19 +95,11 @@ class TradeService:
             Paginated trade list response.
         """
         query = select(Trade)
-
-        if account_id:
-            query = query.where(Trade.account_id == account_id)
-        if broker:
-            query = query.where(Trade.broker == broker)
-        if symbol:
-            query = query.where(Trade.symbol == symbol)
-        if asset_class:
-            query = query.where(Trade.asset_class == asset_class)
-        if from_date:
-            query = query.where(Trade.executed_at >= from_date)
-        if to_date:
-            query = query.where(Trade.executed_at <= to_date)
+        query = self._apply_trade_filters(
+            query,
+            account_id=account_id, broker=broker, symbol=symbol,
+            asset_class=asset_class, from_date=from_date, to_date=to_date,
+        )
 
         count_query = select(func.count()).select_from(query.subquery())
         total = db.execute(count_query).scalar_one()
@@ -150,18 +181,11 @@ class TradeService:
             ).label("net_pnl"),
         )
 
-        if account_id:
-            query = query.where(Trade.account_id == account_id)
-        if broker:
-            query = query.where(Trade.broker == broker)
-        if symbol:
-            query = query.where(Trade.symbol == symbol)
-        if asset_class:
-            query = query.where(Trade.asset_class == asset_class)
-        if from_date:
-            query = query.where(Trade.executed_at >= from_date)
-        if to_date:
-            query = query.where(Trade.executed_at <= to_date)
+        query = self._apply_trade_filters(
+            query,
+            account_id=account_id, broker=broker, symbol=symbol,
+            asset_class=asset_class, from_date=from_date, to_date=to_date,
+        )
 
         row = db.execute(query).mappings().one()
         return TradeSummaryResponse(**dict(row))

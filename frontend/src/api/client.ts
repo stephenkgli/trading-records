@@ -94,127 +94,21 @@ export async function fetchImportLogs(page = 1): Promise<ImportLogListResponse> 
   return handleResponse(response);
 }
 
-// Analytics
-export interface DailySummary {
-  date: string;
-  account_id: string;
-  gross_pnl: string;
-  net_pnl: string;
-  commissions: string;
-  trade_count: number;
-  win_count: number;
-  loss_count: number;
-}
+// Analytics — re-exported from endpoints/analytics
+export type {
+  DailySummary,
+  CalendarEntry,
+  SymbolBreakdown,
+  PerformanceMetrics,
+} from "./types";
 
-export interface CalendarEntry {
-  date: string;
-  net_pnl: string;
-  trade_count: number;
-}
-
-export interface SymbolBreakdown {
-  symbol: string;
-  net_pnl: string;
-  trade_count: number;
-  win_count: number;
-  loss_count: number;
-}
-
-export interface PerformanceMetrics {
-  total_pnl: string;
-  total_commissions: string;
-  net_pnl: string;
-  total_trades: number;
-  win_count: number;
-  loss_count: number;
-  win_rate: number;
-  avg_win: string;
-  avg_loss: string;
-  win_loss_ratio: number | null;
-  expectancy: string;
-  trading_days: number;
-}
-
-export async function fetchDailySummaries(
-  from?: string,
-  to?: string,
-  assetClasses?: string[],
-): Promise<DailySummary[]> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (assetClasses) {
-    if (assetClasses.length > 0) {
-      params.set("asset_classes", assetClasses.join(","));
-    } else {
-      params.set("asset_classes", "");  // 空数组→空字符串，后端返回空结果
-    }
-  }
-  const response = await fetch(`${API_BASE}/analytics/daily?${params}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
-export async function fetchCalendar(
-  year: number,
-  month: number
-): Promise<CalendarEntry[]> {
-  const response = await fetch(
-    `${API_BASE}/analytics/calendar?year=${year}&month=${month}`,
-    { headers: getHeaders() }
-  );
-  return handleResponse(response);
-}
-
-export async function fetchBySymbol(
-  from?: string,
-  to?: string,
-  assetClasses?: string[],
-): Promise<SymbolBreakdown[]> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (assetClasses) {
-    if (assetClasses.length > 0) {
-      params.set("asset_classes", assetClasses.join(","));
-    } else {
-      params.set("asset_classes", "");
-    }
-  }
-  const response = await fetch(`${API_BASE}/analytics/by-symbol?${params}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
-export async function fetchPerformance(
-  from?: string,
-  to?: string,
-  assetClasses?: string[],
-): Promise<PerformanceMetrics> {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (assetClasses) {
-    if (assetClasses.length > 0) {
-      params.set("asset_classes", assetClasses.join(","));
-    } else {
-      params.set("asset_classes", "");
-    }
-  }
-  const response = await fetch(`${API_BASE}/analytics/performance?${params}`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
-export async function fetchAvailableAssetClasses(): Promise<string[]> {
-  const response = await fetch(`${API_BASE}/analytics/asset-classes`, {
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
+export {
+  fetchDailySummaries,
+  fetchCalendar,
+  fetchBySymbol,
+  fetchPerformance,
+  fetchAvailableAssetClasses,
+} from "./endpoints/analytics";
 
 // Groups
 export interface TradeGroup {
