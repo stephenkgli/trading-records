@@ -21,6 +21,10 @@ export type {
   TradeGroupLeg,
   TradeGroupDetail,
   TradeGroupListResponse,
+  CandleData,
+  MarkerData,
+  GroupChartSummary,
+  GroupChartData,
 } from "./groups";
 
 export type {

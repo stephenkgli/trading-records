@@ -19,4 +19,5 @@ export {
   fetchGroups,
   fetchGroupDetail,
   recomputeGroups,
+  fetchGroupChart,
 } from "./groups";

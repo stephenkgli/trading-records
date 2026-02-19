@@ -33,3 +33,37 @@ export interface TradeGroupListResponse {
   page: number;
   per_page: number;
 }
+
+export interface CandleData {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface MarkerData {
+  time: number;
+  position: string;
+  color: string;
+  shape: string;
+  text: string;
+  role: string;
+  trade_id: string;
+}
+
+export interface GroupChartSummary {
+  direction: string;
+  realized_pnl: string | null;
+  opened_at: string;
+  closed_at: string | null;
+}
+
+export interface GroupChartData {
+  symbol: string;
+  interval: string;
+  candles: CandleData[];
+  markers: MarkerData[];
+  group: GroupChartSummary;
+}

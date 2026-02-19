@@ -3,7 +3,7 @@
  */
 
 import { getApiBase, getHeaders, handleResponse } from "./http";
-import type { TradeGroupDetail, TradeGroupListResponse } from "../types";
+import type { TradeGroupDetail, TradeGroupListResponse, GroupChartData } from "../types";
 
 export async function fetchGroups(
   page = 1,
@@ -34,6 +34,15 @@ export async function recomputeGroups(
   const params = symbol ? `?symbol=${symbol}` : "";
   const response = await fetch(`${getApiBase()}/groups/recompute${params}`, {
     method: "POST",
+    headers: getHeaders(),
+  });
+  return handleResponse(response);
+}
+
+export async function fetchGroupChart(
+  groupId: string
+): Promise<GroupChartData> {
+  const response = await fetch(`${getApiBase()}/groups/${groupId}/chart`, {
     headers: getHeaders(),
   });
   return handleResponse(response);

@@ -10,12 +10,14 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import TradeChartModal from "../components/TradeChartModal";
 
 export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["groups", page, statusFilter],
@@ -198,7 +200,11 @@ export default function GroupsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50">
+                <tr
+                  key={row.id}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => setSelectedGroupId(row.original.id)}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
@@ -225,6 +231,13 @@ export default function GroupsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedGroupId && (
+        <TradeChartModal
+          groupId={selectedGroupId}
+          onClose={() => setSelectedGroupId(null)}
+        />
       )}
     </div>
   );
