@@ -341,10 +341,7 @@ class TestGroupChartParams:
         assert resp.status_code == 200
 
     def test_chart_auto_interval_selection(self, client, auth_headers, db_session):
-        """Without explicit interval, auto-selection should be used.
-
-        The seeded group duration is ~1h20m (< 2h) -> should auto-select '1m'.
-        """
+        """Without explicit interval, stock groups should auto-select '1d'."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
@@ -354,5 +351,5 @@ class TestGroupChartParams:
 
         assert resp.status_code == 200
         data = resp.json()
-        # Group duration is ~1h20m -> auto-selects "1m"
-        assert data["interval"] == "1m"
+        # Stock asset_class -> default interval "1d"
+        assert data["interval"] == "1d"

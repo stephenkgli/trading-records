@@ -20,9 +20,8 @@ from backend.schemas.trade import TradeResponse
 from backend.services.market_data import (
     YFinanceProvider,
     build_markers,
-    choose_interval,
     compute_padded_range,
-    resolve_yfinance_symbol,
+    default_interval,
 )
 from backend.services.trade_grouper import recompute_groups
 from backend.services.analytics import refresh_daily_summaries
@@ -122,16 +121,11 @@ def list_groups(
 @router.get("/{group_id}/chart", response_model=GroupChartResponse)
 def get_group_chart(
     group_id: uuid.UUID,
-    interval: str | None = Query(None, pattern=r"^(1m|5m|15m|1h|1d)$", description="K-line interval (1m/5m/15m/1h/1d). Auto-selected if omitted."),
+    interval: str | None = Query(None, pattern=r"^(1m|5m|15m|1h|1d)$", description="K-line interval (1m/5m/15m/1h/1d). Auto-selected by asset class if omitted."),
     padding: int = Query(20, ge=0, le=200, description="Extra bars before/after trade range"),
     db: Session = Depends(get_db),
 ) -> GroupChartResponse:
-    """Return OHLCV candles and trade markers for a group's chart.
-
-    Loads the trade group and its legs (with associated trades), fetches
-    market data for the symbol over the relevant time range, and returns
-    candle data plus lightweight-charts-compatible markers.
-    """
+    """Return OHLCV candles and trade markers for a group's chart."""
     # Load group with legs -> trades eagerly
     group = db.execute(
         select(TradeGroup)
@@ -147,26 +141,25 @@ def get_group_chart(
     if not group.legs:
         raise HTTPException(status_code=404, detail="Trade group has no legs")
 
-    # Determine interval
-    resolved_interval = interval or choose_interval(group.opened_at, group.closed_at)
+    # Determine interval: explicit param > asset_class default
+    resolved_interval = interval or default_interval(group.asset_class)
 
     # Compute padded time range
     start, end = compute_padded_range(
         group.opened_at, group.closed_at, resolved_interval, padding,
     )
 
-    # Resolve symbol for yfinance (e.g. MESZ5 -> MES=F for futures)
+    # Fetch OHLCV data — provider handles symbol mapping internally
     display_symbol = normalize_futures_symbol(group.symbol, group.asset_class)
-    yf_symbol = resolve_yfinance_symbol(group.symbol, group.asset_class)
-
-    # Fetch OHLCV data
     provider = YFinanceProvider()
     try:
-        bars = provider.fetch_ohlcv(yf_symbol, resolved_interval, start, end)
+        bars = provider.fetch_ohlcv(
+            group.symbol, group.asset_class, resolved_interval, start, end,
+        )
     except Exception:
         logger.exception(
             "ohlcv_fetch_failed",
-            symbol=yf_symbol,
+            symbol=group.symbol,
             interval=resolved_interval,
             group_id=str(group_id),
         )
@@ -175,11 +168,16 @@ def get_group_chart(
             detail="Failed to fetch market data from upstream provider",
         )
 
+    if not bars:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No market data available for {display_symbol} ({resolved_interval})",
+        )
+
     # Build markers from legs
     markers_raw = build_markers(group.legs, group.direction)
     markers = [MarkerData(**m) for m in markers_raw]
 
-    # Serialize candles as typed models with float values for JSON charting compatibility
     candles = [
         CandleBar(
             time=bar.time,

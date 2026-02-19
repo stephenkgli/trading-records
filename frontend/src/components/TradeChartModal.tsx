@@ -62,8 +62,9 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
             <div className="flex flex-col items-center justify-center h-[400px] text-red-500 gap-2">
               <span>Failed to load chart data</span>
               <span className="text-sm text-gray-400">
-                This may be a temporary issue (rate limit) or the symbol may not
-                be available. Please try again later.
+                Unable to fetch K-line data for this symbol. The data source may
+                be temporarily unavailable, or historical data for this interval
+                may not exist.
               </span>
             </div>
           )}
