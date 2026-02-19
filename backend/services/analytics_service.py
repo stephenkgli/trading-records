@@ -27,7 +27,9 @@ class AnalyticsService:
         **params: Any,
     ) -> BaseModel | list[BaseModel]:
         """Execute an analytics view and return validated Pydantic model(s)."""
-        raw = view.query_fn(db, **params)
+        # 过滤掉值为 None 的参数，避免传递给不支持该参数的查询函数
+        filtered_params = {k: v for k, v in params.items() if v is not None}
+        raw = view.query_fn(db, **filtered_params)
 
         if view.is_list:
             if view.row_converter:

@@ -9,12 +9,14 @@ Pydantic schema).
 from __future__ import annotations
 
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.api.dependencies import get_analytics_service
 from backend.database import get_db
+from backend.services.analytics import get_available_asset_classes
 from backend.services.analytics_registry import (
     AnalyticsViewDef,
     ParamStyle,
@@ -34,12 +36,21 @@ def _make_date_range_handler(view: AnalyticsViewDef):
         from_date: date | None = Query(None, alias="from"),
         to_date: date | None = Query(None, alias="to"),
         account_id: str | None = Query(None),
+        asset_classes: Optional[str] = Query(None, description="逗号分隔的资产类型列表，如 stock,future,option,forex"),
         db: Session = Depends(get_db),
         service: AnalyticsService = Depends(get_analytics_service),
     ):
+        # 将逗号分隔的 asset_classes 字符串解析为列表
+        # None: 未传参 → 不过滤（查询全部）
+        # "": 传了空字符串 → 空列表 → 返回空结果
+        # "stock,future": 传了具体值 → 按资产类型过滤
+        asset_class_list: list[str] | None = None
+        if asset_classes is not None:
+            asset_class_list = [s.strip().lower() for s in asset_classes.split(",") if s.strip()]
         return service.execute(
             view, db,
             from_date=from_date, to_date=to_date, account_id=account_id,
+            asset_classes=asset_class_list,
         )
 
     handler.__name__ = view.name.replace("-", "_")
@@ -87,3 +98,13 @@ for _view in get_views().values():
             f"the route manually."
         )
     factory(_view)
+
+
+# --- 手动注册的端点 ---
+
+@router.get("/asset-classes", response_model=list[str], summary="获取所有可用的资产类型列表")
+def list_available_asset_classes(
+    db: Session = Depends(get_db),
+):
+    """返回数据库中所有已关闭 trade_group 的资产类型（去重排序）。"""
+    return get_available_asset_classes(db)

@@ -134,11 +134,19 @@ export interface PerformanceMetrics {
 
 export async function fetchDailySummaries(
   from?: string,
-  to?: string
+  to?: string,
+  assetClasses?: string[],
 ): Promise<DailySummary[]> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (assetClasses) {
+    if (assetClasses.length > 0) {
+      params.set("asset_classes", assetClasses.join(","));
+    } else {
+      params.set("asset_classes", "");  // 空数组→空字符串，后端返回空结果
+    }
+  }
   const response = await fetch(`${API_BASE}/analytics/daily?${params}`, {
     headers: getHeaders(),
   });
@@ -158,11 +166,19 @@ export async function fetchCalendar(
 
 export async function fetchBySymbol(
   from?: string,
-  to?: string
+  to?: string,
+  assetClasses?: string[],
 ): Promise<SymbolBreakdown[]> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (assetClasses) {
+    if (assetClasses.length > 0) {
+      params.set("asset_classes", assetClasses.join(","));
+    } else {
+      params.set("asset_classes", "");
+    }
+  }
   const response = await fetch(`${API_BASE}/analytics/by-symbol?${params}`, {
     headers: getHeaders(),
   });
@@ -171,12 +187,27 @@ export async function fetchBySymbol(
 
 export async function fetchPerformance(
   from?: string,
-  to?: string
+  to?: string,
+  assetClasses?: string[],
 ): Promise<PerformanceMetrics> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (assetClasses) {
+    if (assetClasses.length > 0) {
+      params.set("asset_classes", assetClasses.join(","));
+    } else {
+      params.set("asset_classes", "");
+    }
+  }
   const response = await fetch(`${API_BASE}/analytics/performance?${params}`, {
+    headers: getHeaders(),
+  });
+  return handleResponse(response);
+}
+
+export async function fetchAvailableAssetClasses(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/analytics/asset-classes`, {
     headers: getHeaders(),
   });
   return handleResponse(response);

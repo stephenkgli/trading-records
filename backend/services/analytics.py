@@ -68,10 +68,12 @@ def get_daily_summaries(
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> list[dict]:
     """Fetch daily summaries from materialized view."""
     return _get_daily_summaries_from_view_or_trades(
-        db, from_date=from_date, to_date=to_date, account_id=account_id
+        db, from_date=from_date, to_date=to_date, account_id=account_id,
+        asset_classes=asset_classes,
     )
 
 
@@ -80,8 +82,21 @@ def _get_daily_summaries_from_view_or_trades(
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> list[dict]:
     """Fetch daily summaries, falling back to raw trades when the view is unavailable."""
+
+    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回空结果
+    if asset_classes is not None and len(asset_classes) == 0:
+        return []
+
+    # 如果指定了资产类型过滤，视图中没有 asset_class 字段，直接使用 trade_groups 计算
+    if asset_classes:
+        return _compute_daily_summaries_filtered_by_asset_classes(
+            db, asset_classes=asset_classes, from_date=from_date, to_date=to_date,
+            account_id=account_id,
+        )
+
     query = "SELECT * FROM daily_summaries WHERE 1=1"
     params: dict = {}
 
@@ -104,7 +119,8 @@ def _get_daily_summaries_from_view_or_trades(
     except Exception:
         logger.warning("daily_summaries_view_unavailable_fallback_to_trades")
         return _compute_daily_summaries_from_trades(
-            db, from_date=from_date, to_date=to_date, account_id=account_id
+            db, from_date=from_date, to_date=to_date, account_id=account_id,
+            asset_classes=asset_classes,
         )
 
 
@@ -113,6 +129,7 @@ def _compute_daily_summaries_from_trades(
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> list[dict]:
     """Compute daily summaries from trade_groups (realized_pnl) for test/dev databases.
 
@@ -147,11 +164,19 @@ def _compute_daily_summaries_from_trades(
                 SUM(ABS(t.commission)) AS commissions,
                 COUNT(*) AS trade_count
             FROM trades t
+            WHERE 1=1
             GROUP BY DATE(t.executed_at), t.account_id
         ) t_agg ON g_agg.date = t_agg.date AND g_agg.account_id = t_agg.account_id
         WHERE 1=1
     """
     params: dict = {}
+
+    # 如果指定了资产类型过滤，使用专门的过滤查询
+    if asset_classes:
+        return _compute_daily_summaries_filtered_by_asset_classes(
+            db, asset_classes=asset_classes, from_date=from_date, to_date=to_date,
+            account_id=account_id,
+        )
 
     if from_date:
         query += " AND COALESCE(g_agg.date, t_agg.date) >= :from_date"
@@ -192,11 +217,16 @@ def get_by_symbol(
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> list[dict]:
     """Get P&L breakdown by symbol using trade_groups realized_pnl.
 
     期货品种会被归一化（如 MESU5, MESH5 -> MES），然后按归一化后的名称聚合。
     """
+    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回空结果
+    if asset_classes is not None and len(asset_classes) == 0:
+        return []
+
     query = """
         SELECT
             tg.symbol,
@@ -239,6 +269,11 @@ def get_by_symbol(
         params["tg_to_date"] = to_date
     if account_id:
         query += " AND tg.account_id = :account_id"
+    if asset_classes:
+        placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
+        query += f" AND tg.asset_class IN ({placeholders})"
+        for i, ac in enumerate(asset_classes):
+            params[f"ac_{i}"] = ac
 
     query += " GROUP BY tg.symbol, tg.asset_class, trade_counts.cnt ORDER BY net_pnl DESC"
     params = _sqlite_safe_params(db, params)
@@ -261,6 +296,8 @@ def get_by_symbol(
         entry["trade_count"] += int(row["trade_count"])
         entry["win_count"] += int(row["win_count"])
         entry["loss_count"] += int(row["loss_count"])
+
+    # 如果指定了资产类型过滤，在查询结果基础上无需额外过滤（SQL 已处理）
 
     # 按 net_pnl 降序排序
     result = sorted(aggregated.values(), key=lambda x: x["net_pnl"], reverse=True)
@@ -296,13 +333,86 @@ def get_by_strategy(
     return [dict(row) for row in rows]
 
 
+def _compute_daily_summaries_filtered_by_asset_classes(
+    db: Session,
+    asset_classes: list[str],
+    from_date: date | None = None,
+    to_date: date | None = None,
+    account_id: str | None = None,
+) -> list[dict]:
+    """按指定资产类型过滤计算每日汇总。
+
+    asset_class 可以直接在 SQL 层过滤，无需 Python 层归一化。
+    """
+    # 构建 asset_class IN 子句
+    ac_placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
+
+    query = f"""
+        SELECT
+            COALESCE(g_agg.date, t_agg.date) AS date,
+            COALESCE(g_agg.account_id, t_agg.account_id) AS account_id,
+            COALESCE(g_agg.gross_pnl, 0) AS gross_pnl,
+            COALESCE(g_agg.gross_pnl, 0) - COALESCE(t_agg.commissions, 0) AS net_pnl,
+            COALESCE(t_agg.commissions, 0) AS commissions,
+            COALESCE(t_agg.trade_count, 0) AS trade_count,
+            COALESCE(g_agg.win_count, 0) AS win_count,
+            COALESCE(g_agg.loss_count, 0) AS loss_count
+        FROM (
+            SELECT
+                DATE(tg.closed_at) AS date,
+                tg.account_id,
+                SUM(tg.realized_pnl) AS gross_pnl,
+                SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END) AS win_count,
+                SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END) AS loss_count
+            FROM trade_groups tg
+            WHERE tg.status = 'closed'
+              AND tg.asset_class IN ({ac_placeholders})
+            GROUP BY DATE(tg.closed_at), tg.account_id
+        ) g_agg
+        FULL OUTER JOIN (
+            SELECT
+                DATE(t.executed_at) AS date,
+                t.account_id,
+                SUM(ABS(t.commission)) AS commissions,
+                COUNT(*) AS trade_count
+            FROM trades t
+            WHERE t.asset_class IN ({ac_placeholders})
+            GROUP BY DATE(t.executed_at), t.account_id
+        ) t_agg ON g_agg.date = t_agg.date AND g_agg.account_id = t_agg.account_id
+        WHERE 1=1
+    """
+    params: dict = {}
+    for i, ac in enumerate(asset_classes):
+        params[f"ac_{i}"] = ac
+
+    if from_date:
+        query += " AND COALESCE(g_agg.date, t_agg.date) >= :from_date"
+        params["from_date"] = from_date
+    if to_date:
+        query += " AND COALESCE(g_agg.date, t_agg.date) <= :to_date"
+        params["to_date"] = to_date
+    if account_id:
+        query += " AND COALESCE(g_agg.account_id, t_agg.account_id) = :account_id"
+        params["account_id"] = account_id
+
+    query += " ORDER BY date ASC"
+    params = _sqlite_safe_params(db, params)
+    rows = db.execute(text(query), params).mappings().all()
+    return [dict(row) for row in rows]
+
+
 def _get_win_loss_from_groups(
     db: Session,
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> dict:
     """从 trade_groups 表获取 win/loss count 及 avg_win/avg_loss（基于已关闭 round-trip 的 realized_pnl）。"""
+    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回零值
+    if asset_classes is not None and len(asset_classes) == 0:
+        return {"win_count": 0, "loss_count": 0, "avg_win": Decimal("0"), "avg_loss": Decimal("0")}
+
     query = """
         SELECT
             COALESCE(SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END), 0) AS win_count,
@@ -323,6 +433,11 @@ def _get_win_loss_from_groups(
     if account_id:
         query += " AND tg.account_id = :account_id"
         params["account_id"] = account_id
+    if asset_classes:
+        placeholders = ", ".join(f":ac_{i}" for i in range(len(asset_classes)))
+        query += f" AND tg.asset_class IN ({placeholders})"
+        for i, ac in enumerate(asset_classes):
+            params[f"ac_{i}"] = ac
 
     params = _sqlite_safe_params(db, params)
 
@@ -346,15 +461,34 @@ def get_performance_metrics(
     from_date: date | None = None,
     to_date: date | None = None,
     account_id: str | None = None,
+    asset_classes: list[str] | None = None,
 ) -> dict:
     """Compute overall performance metrics.
 
     P&L is derived from trade_groups.realized_pnl (closed round-trips),
     not from raw buy/sell amounts.
     """
+    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回零值结果
+    if asset_classes is not None and len(asset_classes) == 0:
+        return {
+            "total_pnl": Decimal("0"),
+            "total_commissions": Decimal("0"),
+            "net_pnl": Decimal("0"),
+            "total_trades": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "win_rate": 0.0,
+            "avg_win": Decimal("0"),
+            "avg_loss": Decimal("0"),
+            "win_loss_ratio": None,
+            "expectancy": Decimal("0"),
+            "trading_days": 0,
+        }
+
     # 从 trade_groups 表获取正确的 win/loss count 和 avg_win/avg_loss
     wl = _get_win_loss_from_groups(
-        db, from_date=from_date, to_date=to_date, account_id=account_id
+        db, from_date=from_date, to_date=to_date, account_id=account_id,
+        asset_classes=asset_classes,
     )
     win_count = wl["win_count"]
     loss_count = wl["loss_count"]
@@ -378,6 +512,11 @@ def get_performance_metrics(
     if account_id:
         pnl_query += " AND tg.account_id = :account_id"
         pnl_params["account_id"] = account_id
+    if asset_classes:
+        placeholders = ", ".join(f":pnl_ac_{i}" for i in range(len(asset_classes)))
+        pnl_query += f" AND tg.asset_class IN ({placeholders})"
+        for i, ac in enumerate(asset_classes):
+            pnl_params[f"pnl_ac_{i}"] = ac
 
     pnl_params = _sqlite_safe_params(db, pnl_params)
     pnl_row = db.execute(text(pnl_query), pnl_params).mappings().first()
@@ -402,6 +541,11 @@ def get_performance_metrics(
     if account_id:
         comm_query += " AND t.account_id = :account_id"
         comm_params["account_id"] = account_id
+    if asset_classes:
+        placeholders = ", ".join(f":comm_ac_{i}" for i in range(len(asset_classes)))
+        comm_query += f" AND t.asset_class IN ({placeholders})"
+        for i, ac in enumerate(asset_classes):
+            comm_params[f"comm_ac_{i}"] = ac
 
     comm_params = _sqlite_safe_params(db, comm_params)
     comm_row = db.execute(text(comm_query), comm_params).mappings().first()
@@ -441,3 +585,15 @@ def get_performance_metrics(
         "expectancy": expectancy,
         "trading_days": trading_days,
     }
+
+
+def get_available_asset_classes(db: Session) -> list[str]:
+    """获取所有已关闭 trade_group 的资产类型列表（去重排序）。"""
+    query = """
+        SELECT DISTINCT tg.asset_class
+        FROM trade_groups tg
+        WHERE tg.status = 'closed'
+        ORDER BY tg.asset_class ASC
+    """
+    rows = db.execute(text(query)).mappings().all()
+    return [row["asset_class"] for row in rows]
