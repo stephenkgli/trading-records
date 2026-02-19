@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from backend.ingestion.csv_importer import CSVImporter
 from backend.ingestion.ibkr_flex import IBKRFlexIngester
 from backend.models.import_log import ImportLog
+from backend.models.trade import Trade
 from backend.schemas.import_result import (
     ImportLogListResponse,
     ImportLogResponse,
@@ -113,8 +114,41 @@ class ImportService:
         )
         logs = db.execute(query).scalars().all()
 
+        # 获取这些 import_log 关联的交易记录的起止时间和 broker 信息
+        log_ids = [log.id for log in logs]
+        trade_stats: dict = {}
+        if log_ids:
+            stats_query = (
+                select(
+                    Trade.import_log_id,
+                    func.min(Trade.executed_at).label("date_from"),
+                    func.max(Trade.executed_at).label("date_to"),
+                    func.string_agg(
+                        func.distinct(Trade.broker), ", "
+                    ).label("brokers"),
+                )
+                .where(Trade.import_log_id.in_(log_ids))
+                .group_by(Trade.import_log_id)
+            )
+            for row in db.execute(stats_query).all():
+                trade_stats[row.import_log_id] = {
+                    "trade_date_from": row.date_from,
+                    "trade_date_to": row.date_to,
+                    "broker": row.brokers,
+                }
+
+        log_responses = []
+        for log in logs:
+            resp = ImportLogResponse.model_validate(log)
+            stats = trade_stats.get(log.id)
+            if stats:
+                resp.trade_date_from = stats["trade_date_from"]
+                resp.trade_date_to = stats["trade_date_to"]
+                resp.broker = stats["broker"]
+            log_responses.append(resp)
+
         return ImportLogListResponse(
-            logs=[ImportLogResponse.model_validate(log) for log in logs],
+            logs=log_responses,
             total=total,
             page=page,
             per_page=per_page,

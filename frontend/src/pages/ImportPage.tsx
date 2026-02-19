@@ -107,7 +107,8 @@ export default function ImportPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Broker</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Trade Period</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Imported</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Skipped</th>
@@ -120,7 +121,22 @@ export default function ImportPage() {
                   <td className="px-3 py-2">
                     {new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(log.started_at))}
                   </td>
-                  <td className="px-3 py-2">{log.source}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                      {log.broker || log.source}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-600">
+                    {log.trade_date_from && log.trade_date_to ? (
+                      <>
+                        {new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(log.trade_date_from))}
+                        <span className="mx-1">→</span>
+                        {new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(log.trade_date_to))}
+                      </>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                       log.status === "success" ? "bg-green-100 text-green-700" :

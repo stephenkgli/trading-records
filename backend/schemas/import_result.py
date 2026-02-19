@@ -23,6 +23,9 @@ class ImportLogResponse(BaseModel):
     errors: dict | None = None
     started_at: datetime
     completed_at: datetime | None = None
+    trade_date_from: datetime | None = None
+    trade_date_to: datetime | None = None
+    broker: str | None = None
 
 
 class ImportResult(BaseModel):

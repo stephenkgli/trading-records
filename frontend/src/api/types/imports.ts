@@ -24,6 +24,9 @@ export interface ImportLog {
   errors: Record<string, unknown> | null;
   started_at: string;
   completed_at: string | null;
+  trade_date_from: string | null;
+  trade_date_to: string | null;
+  broker: string | null;
 }
 
 export interface ImportLogListResponse {
