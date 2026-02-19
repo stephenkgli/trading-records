@@ -190,12 +190,15 @@ def _recompute_for_pair(db: Session, account_id: str, symbol: str) -> tuple[int,
                         else Decimal("0")
                     )
                     if matched_group.direction == "long":
-                        pnl = (trade.price - avg_entry) * close_qty * matched_group.multiplier
+                        exit_pnl = (trade.price - avg_entry) * close_qty * matched_group.multiplier
                     else:
-                        pnl = (avg_entry - trade.price) * close_qty * matched_group.multiplier
+                        exit_pnl = (avg_entry - trade.price) * close_qty * matched_group.multiplier
+
+                    # 总已实现盈亏 = 累积的 trim 盈亏 + 最终 exit 盈亏
+                    total_pnl = matched_group.accumulated_pnl + exit_pnl
 
                     matched_group.group.status = "closed"
-                    matched_group.group.realized_pnl = pnl
+                    matched_group.group.realized_pnl = total_pnl
                     matched_group.group.closed_at = trade.executed_at
 
                     leg = TradeGroupLeg(
@@ -250,6 +253,13 @@ def _recompute_for_pair(db: Session, account_id: str, symbol: str) -> tuple[int,
                         else Decimal("0")
                     )
 
+                    # 计算 trim 阶段的已实现盈亏并累积
+                    if matched_group.direction == "long":
+                        trim_pnl = (trade.price - avg_entry) * qty * matched_group.multiplier
+                    else:
+                        trim_pnl = (avg_entry - trade.price) * qty * matched_group.multiplier
+                    matched_group.accumulated_pnl += trim_pnl
+
                     matched_group.net_qty -= qty
                     matched_group.cost_basis = avg_entry * matched_group.net_qty
 
@@ -293,6 +303,8 @@ class _OpenGroup:
         self.cost_basis = cost_basis
         self.direction = direction
         self.multiplier = multiplier
+        # 累积 trim（部分平仓）阶段的已实现盈亏
+        self.accumulated_pnl = Decimal("0")
 
 
 def _find_matching_group(
