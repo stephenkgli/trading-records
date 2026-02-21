@@ -1,105 +1,28 @@
-"""
-Tests for the config package (environment resolution and settings loading).
-
-Verifies:
-1. Environment resolution based on APP_ENV
-2. Fallback to test when PYTEST_CURRENT_TEST is set
-3. Fallback to dev when no env vars are set
-4. Correct settings class selection per environment
-5. CORS origins parsing
-"""
+"""Tests for config package settings loading and parsing."""
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
-import pytest
-
 from backend.config.base import BaseAppSettings
-from backend.config.environments import DevSettings, ProdSettings, TestSettings
-from backend.config.loader import _resolve_environment, get_settings
-
-
-class TestResolveEnvironment:
-    """Test the _resolve_environment helper."""
-
-    def test_explicit_prod(self):
-        """APP_ENV=prod should resolve to 'prod'."""
-        with patch.dict("os.environ", {"APP_ENV": "prod"}, clear=False):
-            assert _resolve_environment() == "prod"
-
-    def test_explicit_test(self):
-        """APP_ENV=test should resolve to 'test'."""
-        with patch.dict("os.environ", {"APP_ENV": "test"}, clear=False):
-            assert _resolve_environment() == "test"
-
-    def test_explicit_dev(self):
-        """APP_ENV=dev should resolve to 'dev'."""
-        with patch.dict("os.environ", {"APP_ENV": "dev"}, clear=False):
-            assert _resolve_environment() == "dev"
-
-    def test_case_insensitive(self):
-        """APP_ENV should be case-insensitive."""
-        with patch.dict("os.environ", {"APP_ENV": "PROD"}, clear=False):
-            assert _resolve_environment() == "prod"
-
-    def test_fallback_to_test_when_pytest(self):
-        """Should fallback to 'test' when PYTEST_CURRENT_TEST is set."""
-        with patch.dict(
-            "os.environ",
-            {"PYTEST_CURRENT_TEST": "some_test", "APP_ENV": ""},
-            clear=False,
-        ):
-            assert _resolve_environment() == "test"
-
-    def test_fallback_to_dev(self):
-        """Should fallback to 'dev' when no env vars match."""
-        env = {"APP_ENV": ""}
-        with patch.dict("os.environ", env, clear=False):
-            with patch("os.getenv") as mock_getenv:
-                mock_getenv.side_effect = lambda key, default="": {
-                    "APP_ENV": "",
-                    "PYTEST_CURRENT_TEST": None,
-                }.get(key, default)
-                assert _resolve_environment() == "dev"
+from backend.config.loader import get_settings
 
 
 class TestGetSettings:
-    """Test that get_settings returns the correct settings class."""
+    """Test settings loader behavior."""
 
-    def test_returns_dev_settings_for_dev(self):
-        """get_settings should return DevSettings for dev environment."""
-        with patch("backend.config.loader._resolve_environment", return_value="dev"):
-            get_settings.cache_clear()
-            s = get_settings()
-            assert isinstance(s, DevSettings)
-            get_settings.cache_clear()
+    def test_returns_base_settings(self):
+        """get_settings should return BaseAppSettings."""
+        get_settings.cache_clear()
+        s = get_settings()
+        assert isinstance(s, BaseAppSettings)
+        get_settings.cache_clear()
 
-    def test_returns_test_settings_for_test(self):
-        """get_settings should return TestSettings for test environment."""
-        with patch("backend.config.loader._resolve_environment", return_value="test"):
-            get_settings.cache_clear()
-            s = get_settings()
-            assert isinstance(s, TestSettings)
-            get_settings.cache_clear()
-
-    def test_returns_prod_settings_for_prod(self):
-        """get_settings should return ProdSettings for prod environment."""
-        with patch("backend.config.loader._resolve_environment", return_value="prod"):
-            get_settings.cache_clear()
-            s = get_settings()
-            assert isinstance(s, ProdSettings)
-            get_settings.cache_clear()
-
-    def test_returns_prod_settings_for_production(self):
-        """get_settings should return ProdSettings for 'production' alias."""
-        with patch(
-            "backend.config.loader._resolve_environment", return_value="production"
-        ):
-            get_settings.cache_clear()
-            s = get_settings()
-            assert isinstance(s, ProdSettings)
-            get_settings.cache_clear()
+    def test_get_settings_is_cached(self):
+        """get_settings should return the same instance due to cache."""
+        get_settings.cache_clear()
+        first = get_settings()
+        second = get_settings()
+        assert first is second
+        get_settings.cache_clear()
 
 
 class TestBaseAppSettings:

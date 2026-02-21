@@ -49,10 +49,10 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
                         +--------------------+     | - FIFO matching  |
                         |    Config          |     | - Round-trip     |
                         |                    |     |   tracking       |
-                        | Env-aware settings |     |                  |
-                        | - Dev / Test / Prod|     | Analytics Engine |
-                        | - Pydantic-settings|     | - P&L aggregation|
-                        | - APP_ENV driven   |     | - Daily summaries|
+                        | Pydantic settings  |     |                  |
+                        | - .env loading     |     | Analytics Engine |
+                        | - Runtime updates  |     | - P&L aggregation|
+                        | - Typed fields     |     | - Daily summaries|
                         +--------------------+     |                  |
                                                    | Scheduler        |
                                                    | - APScheduler    |
@@ -111,54 +111,11 @@ GET /api/v1/groups/{id}/chart
 - **Single container** - Frontend built as static files and served from FastAPI
 - **Pluggable sources** - New import sources implement the `ImportSource` interface without modifying the pipeline
 - **Service layer** - Business logic concentrated in services; API handlers remain thin request/response mappers
-- **Environment-aware config** - Settings loaded per environment (dev/test/prod) via `APP_ENV`
+- **Pydantic config** - Settings loaded from environment variables and `.env`
 - **Unified exceptions** - Structured JSON error responses with error code, message, and context
 - **Dependency injection** - Services injected via FastAPI `Depends()` for testability
 - **Fail-fast market data** - Provider errors propagate directly; no fallback chains or circuit breakers
 - **Permanent OHLCV cache** - Completed bars cached forever in PostgreSQL; no expiry, no staleness checks
-
-## Features
-
-### Supported
-
-- Multi-broker trade import from IBKR and Tradovate CSV/XLSX exports
-- Automatic broker format detection for CSV files (IBKR Activity Statement, Tradovate export)
-- Pluggable import source architecture (add new brokers without modifying the pipeline)
-- Unified trade schema across all brokers
-- Composite-key deduplication (safe to re-import)
-- FIFO trade grouping into round-trips (long/short, entry/exit/add/trim)
-- Strategy tagging and journal notes on trade groups
-- OHLCV price charts with trade markers (Lightweight Charts)
-  - Databento for CME futures (continuous front-month contracts)
-  - Tiingo for US stocks (split/dividend-adjusted prices)
-  - PostgreSQL OHLCV cache with in-progress bar filtering
-  - Daily rate limiting per provider
-- P&L calendar heatmap, equity curve, per-symbol breakdown
-- Key metrics dashboard (win rate, profit factor, average win/loss)
-- Sortable/filterable trade table
-- API key authentication
-- Import audit trail with error reporting
-- Docker Compose single-command deployment (127.0.0.1 bound)
-- PostgreSQL materialized views for analytics performance
-- Structured JSON logging (structlog)
-- Unified exception handling with structured error responses
-- Environment-aware configuration (dev/test/prod)
-- Service-layer architecture with dependency injection
-- Versioned REST API (`/api/v1`)
-- Typed frontend API layer with separated types, endpoints, and hooks
-- Comprehensive test suite (unit, integration, API)
-
-### Not Yet Supported
-
-- Order placement or trade execution
-- Mobile application
-- Multi-user / multi-tenant
-- Options exercise/assignment handling
-- Futures rollover linking
-- Multi-leg options strategy grouping
-- Push notifications / alerts
-- PostgreSQL-backed job scheduling (currently in-process APScheduler)
-- WAL archiving / point-in-time recovery
 
 ## Tech Stack
 
@@ -174,90 +131,6 @@ GET /api/v1/groups/{id}/chart
 | Testing    | pytest, pytest-asyncio, respx, testcontainers               |
 | Deploy     | Docker, Docker Compose                                      |
 | Deps       | uv (Python), npm (Frontend)                                 |
-
-## Project Structure
-
-```
-trading-records/
-├── backend/
-│   ├── main.py              # FastAPI entry point + static file serving
-│   ├── config/              # Environment-aware settings (pydantic-settings)
-│   │   ├── base.py          # Base settings definitions
-│   │   ├── environments.py  # Dev / Test / Prod overrides
-│   │   └── loader.py        # APP_ENV resolution and singleton
-│   ├── exceptions/          # Unified exception hierarchy
-│   │   ├── base.py          # AppException base class
-│   │   └── handlers.py      # Global FastAPI exception handlers
-│   ├── logging_config.py    # structlog setup
-│   ├── database.py          # SQLAlchemy engine + session
-│   ├── auth.py              # API key middleware
-│   ├── api/                 # REST route handlers
-│   │   ├── v1/              # Versioned router aggregation (/api/v1)
-│   │   ├── market_data.py   # OHLCV cache admin endpoints
-│   │   └── dependencies.py  # Service dependency injection (Depends)
-│   ├── ingestion/           # Import pipeline
-│   │   ├── pipeline.py      # IngestionPipeline orchestrator
-│   │   ├── sources/         # Pluggable import sources
-│   │   │   ├── base.py      # ImportSource ABC + SourceRegistry
-│   │   │   ├── csv_source.py
-│   │   ├── base.py          # BaseIngester (validate/dedup/persist)
-│   │   ├── csv_importer.py  # CSV format detection + column mapping
-│   │   ├── normalizer.py    # Broker-specific normalization
-│   │   └── validator.py     # Field and range validation
-│   ├── models/              # SQLAlchemy ORM models
-│   │   └── ohlcv_cache.py   # OHLCV cache table model
-│   ├── schemas/             # Pydantic request/response schemas
-│   ├── services/            # Domain services
-│   │   ├── trade_service.py      # Trade query logic
-│   │   ├── import_service.py     # Import orchestration
-│   │   ├── analytics_service.py  # Analytics query wrapper
-│   │   ├── analytics.py          # P&L aggregation and summaries
-│   │   ├── market_data.py        # MarketDataProvider protocol + helpers
-│   │   ├── trade_grouper.py      # FIFO round-trip matching
-│   │   ├── scheduler.py          # APScheduler management
-│   │   ├── providers/            # Market data provider implementations
-│   │   │   ├── databento_provider.py  # CME futures via Databento
-│   │   │   ├── tiingo_provider.py     # US stocks via Tiingo
-│   │   │   ├── validation.py          # OHLCV bar integrity checks
-│   │   │   ├── rate_limit.py          # Daily API call counters
-│   │   │   └── errors.py             # Provider error hierarchy
-│   │   └── cache/                # OHLCV cache layer
-│   │       └── ohlcv_cache.py    # PostgreSQL cache service
-│   └── migrations/          # Alembic migration versions
-├── config/
-│   └── config.example.yaml  # Configuration template
-├── frontend/
-│   └── src/
-│       ├── pages/           # Dashboard, Trades, Groups, Analytics, Import, Settings
-│       ├── components/      # TradeTable, EquityCurve, PnLCalendar, MetricsCards, etc.
-│       └── api/             # Typed API client layer
-│           ├── client.ts    # Legacy HTTP client (TanStack Query)
-│           ├── types/       # TypeScript interfaces for API responses
-│           ├── endpoints/   # Fetch functions per resource (trades, imports, etc.)
-│           └── hooks/       # React hooks wrapping endpoints with loading/error state
-├── tests/
-│   ├── conftest.py          # SQLite test fixtures and session setup
-│   ├── fixtures/            # Sample broker data (CSV)
-│   ├── test_api/            # API integration tests
-│   ├── test_providers/      # Market data provider tests
-│   │   ├── test_validation.py         # Bar validation tests
-│   │   ├── test_rate_limit.py         # Rate limiter tests
-│   │   ├── test_databento_provider.py # Databento provider tests (mocked)
-│   │   ├── test_tiingo_provider.py    # Tiingo provider tests (mocked)
-│   │   ├── test_ohlcv_cache.py        # Cache service tests
-│   │   └── test_chart_endpoint.py     # Chart endpoint integration tests
-│   ├── test_pipeline.py     # Ingestion pipeline tests
-│   ├── test_services.py     # Service layer tests
-│   ├── test_exceptions.py   # Exception handling tests
-│   ├── test_config.py       # Config loading tests
-│   └── test_dependencies.py # DI tests
-├── docs/
-│   └── design-market-data-providers.md  # Market data provider design doc
-├── Dockerfile               # Multi-stage build (Node + Python)
-├── docker-compose.yml       # PostgreSQL + FastAPI
-├── pyproject.toml           # Python dependencies (uv)
-└── .env.example             # Environment variable template
-```
 
 ## Getting Started
 
@@ -311,18 +184,6 @@ npm run dev
 
 Access: http://localhost:3000 (Vite dev) | http://localhost:8000 (API) | http://localhost:8000/docs
 
-### Environment Configuration
-
-The backend loads settings based on the `APP_ENV` environment variable:
-
-| `APP_ENV`     | Settings class | Env file fallback    |
-|---------------|----------------|----------------------|
-| `dev` (default) | `DevSettings`  | `.env`, `.env.dev`  |
-| `test`        | `TestSettings`  | `.env`, `.env.test` |
-| `prod`        | `ProdSettings`  | `.env`, `.env.prod` |
-
-When `APP_ENV` is unset, the loader auto-detects `test` if running under pytest, otherwise defaults to `dev`.
-
 ## Broker Configuration
 
 ### CSV Import
@@ -347,52 +208,6 @@ OHLCV_CACHE_ENABLED=true
 **Tiingo** (stocks): Sign up at [tiingo.com](https://www.tiingo.com). Free tier provides 500 API calls/day for end-of-day data. The daily call counter is set to 400 as a safety margin.
 
 Completed bars are cached permanently in PostgreSQL. After initial fetches, subsequent chart views are served from cache with no provider calls.
-
-## Importing Trades
-
-**CSV Upload:**
-```bash
-curl -X POST http://localhost:8000/api/v1/import/csv \
-  -H "X-API-Key: <your-api-key>" \
-  -F "file=@trades.csv"
-```
-
-## API Endpoints
-
-All endpoints are served under the `/api/v1` prefix. Error responses follow a unified JSON format:
-
-```json
-{
-  "detail": "Human-readable message",
-  "error": {
-    "code": "error_code",
-    "message": "Structured error description",
-    "context": {}
-  }
-}
-```
-
-| Method  | Endpoint                             | Description                               |
-|---------|--------------------------------------|-------------------------------------------|
-| GET     | `/health`                            | Service health check                      |
-| GET     | `/api/v1/trades`                     | List trades (paginated)                   |
-| GET     | `/api/v1/trades/{id}`                | Trade detail                              |
-| GET     | `/api/v1/trades/summary`             | Trade summary metrics                     |
-| GET     | `/api/v1/groups`                     | List trade groups                         |
-| GET     | `/api/v1/groups/{id}`                | Group detail with legs                    |
-| GET     | `/api/v1/groups/{id}/chart`          | OHLCV candles + trade markers             |
-| PATCH   | `/api/v1/groups/{id}`                | Update strategy tag / notes               |
-| POST    | `/api/v1/groups/recompute`           | Recompute grouping for symbol             |
-| POST    | `/api/v1/import/csv`                 | Upload and import CSV                     |
-| GET     | `/api/v1/import/logs`                | Import attempt history                    |
-| GET     | `/api/v1/analytics/daily`            | Daily P&L summary                         |
-| GET     | `/api/v1/analytics/calendar`         | P&L calendar data                         |
-| GET     | `/api/v1/analytics/by-symbol`        | Per-symbol statistics                     |
-| GET     | `/api/v1/analytics/by-strategy`      | Per-strategy statistics                   |
-| GET     | `/api/v1/analytics/performance`      | Overall performance metrics               |
-| DELETE  | `/api/v1/market-data/cache`          | Invalidate OHLCV cache (admin)            |
-| GET     | `/api/v1/config`                     | Read runtime config (redacted secrets)    |
-| PUT     | `/api/v1/config`                     | Update runtime config                     |
 
 ## Running Tests
 
