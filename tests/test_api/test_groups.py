@@ -102,3 +102,34 @@ class TestGroupsAPI:
         assert resp.status_code == 200
         symbols = [g["symbol"] for g in resp.json()["groups"]]
         assert symbols == ["AAPL", "GOOG", "MSFT"]
+
+    def test_groups_filter_by_asset_classes(
+        self, client, auth_headers, db_session, make_trade_group
+    ):
+        make_trade_group(symbol="AAPL", asset_class="stock")
+        make_trade_group(symbol="MESZ5", asset_class="future")
+        make_trade_group(symbol="AAPL250117C150", asset_class="option")
+        db_session.commit()
+
+        resp = client.get(
+            "/api/v1/groups?asset_classes=Stock,FUTURE",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total"] == 2
+        assert {g["asset_class"] for g in data["groups"]} == {"stock", "future"}
+
+    def test_groups_filter_empty_asset_classes_returns_empty(
+        self, client, auth_headers, db_session, make_trade_group
+    ):
+        make_trade_group(symbol="AAPL", asset_class="stock")
+        db_session.commit()
+
+        resp = client.get("/api/v1/groups?asset_classes=", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total"] == 0
+        assert data["groups"] == []

@@ -109,9 +109,13 @@ export function usePerformance(
 export function useGroups(
   page = 1,
   status?: string,
-  symbol?: string
+  symbol?: string,
+  assetClasses?: string[],
 ): UseQueryResult<TradeGroupListResponse> {
-  return useQuery(() => fetchGroups(page, status, symbol), [page, status, symbol]);
+  return useQuery(
+    () => fetchGroups(page, status, symbol, undefined, undefined, assetClasses),
+    [page, status, symbol, assetClasses],
+  );
 }
 
 export function useGroupDetail(id: string): UseQueryResult<TradeGroupDetail> {

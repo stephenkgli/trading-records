@@ -37,6 +37,19 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
 
+def _parse_asset_classes(raw: str | None) -> list[str] | None:
+    """Parse a comma-separated asset_classes query parameter.
+
+    Semantics:
+    - ``None`` (parameter omitted) -> ``None`` (no filter).
+    - ``""`` (empty string passed) -> ``[]`` (explicit empty selection).
+    - ``"stock,future"`` -> ``["stock", "future"]``.
+    """
+    if raw is None:
+        return None
+    return [s.strip().lower() for s in raw.split(",") if s.strip()]
+
+
 def _get_provider(asset_class: str) -> MarketDataProvider:
     """Pick provider by asset class."""
     if asset_class == "future":
@@ -104,6 +117,10 @@ def list_groups(
     status: str | None = Query(None),
     symbol: str | None = Query(None),
     account_id: str | None = Query(None),
+    asset_classes: str | None = Query(
+        None,
+        description="Comma-separated asset classes, e.g. stock,future,option,forex",
+    ),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     sort: str = Query("opened_at"),
@@ -111,6 +128,10 @@ def list_groups(
     db: Session = Depends(get_db),
 ):
     """List trade groups with filtering, global sorting, and pagination."""
+    asset_class_list = _parse_asset_classes(asset_classes)
+    if asset_class_list is not None and len(asset_class_list) == 0:
+        return TradeGroupListResponse(groups=[], total=0, page=page, per_page=per_page)
+
     query = select(TradeGroup)
 
     if status:
@@ -119,6 +140,8 @@ def list_groups(
         query = query.where(TradeGroup.symbol == symbol)
     if account_id:
         query = query.where(TradeGroup.account_id == account_id)
+    if asset_class_list:
+        query = query.where(TradeGroup.asset_class.in_(asset_class_list))
 
     count_query = select(func.count()).select_from(query.subquery())
     total = db.execute(count_query).scalar_one()

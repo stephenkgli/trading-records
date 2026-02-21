@@ -1,6 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { fetchGroups, recomputeGroups, type TradeGroup } from "../api/client";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import {
+  fetchGroups,
+  recomputeGroups,
+  fetchAvailableAssetClasses,
+  type TradeGroup,
+} from "../api/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable,
@@ -10,12 +15,37 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import TradeChartModal from "../components/TradeChartModal";
+import AssetClassFilter from "../components/AssetClassFilter";
 import { formatDateTime } from "../utils/date";
+
+const STORAGE_KEY = "groups_asset_class_filter";
+
+function loadSavedSelection(): string[] | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSelection(assetClasses: string[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(assetClasses));
+  } catch {
+    // ignore quota errors
+  }
+}
 
 export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [selectedAssetClasses, setSelectedAssetClasses] = useState<string[] | null>(null);
+  const initializedRef = useRef(false);
   const [sorting, setSorting] = useState<SortingState>([
     { id: "opened_at", desc: true },
   ]);
@@ -24,16 +54,51 @@ export default function GroupsPage() {
   const orderParam: "asc" | "desc" | undefined = sorting[0]
     ? (sorting[0].desc ? "desc" : "asc")
     : undefined;
+  const assetClassesParam =
+    selectedAssetClasses === null ? undefined : selectedAssetClasses;
+
+  const { data: availableAssetClasses = [] } = useQuery({
+    queryKey: ["availableAssetClasses"],
+    queryFn: fetchAvailableAssetClasses,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (availableAssetClasses.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
+
+    const saved = loadSavedSelection();
+    if (saved === null) {
+      setSelectedAssetClasses([...availableAssetClasses]);
+    } else {
+      const validSet = new Set(availableAssetClasses);
+      const restored = saved.filter((ac) => validSet.has(ac));
+      setSelectedAssetClasses(restored);
+    }
+  }, [availableAssetClasses]);
+
+  useEffect(() => {
+    if (selectedAssetClasses === null) return;
+    saveSelection(selectedAssetClasses);
+  }, [selectedAssetClasses]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["groups", page, statusFilter, sortParam, orderParam],
+    queryKey: [
+      "groups",
+      page,
+      statusFilter,
+      sortParam,
+      orderParam,
+      assetClassesParam,
+    ],
     queryFn: () =>
       fetchGroups(
         page,
         statusFilter || undefined,
         undefined,
         sortParam,
-        orderParam
+        orderParam,
+        assetClassesParam,
       ),
   });
 
@@ -46,6 +111,10 @@ export default function GroupsPage() {
 
   const perPage = data?.per_page ?? 50;
   const pageOffset = (page - 1) * perPage;
+  const handleAssetClassChange = useCallback((acs: string[]) => {
+    setSelectedAssetClasses(acs);
+    setPage(1);
+  }, []);
 
   const columns = useMemo<ColumnDef<TradeGroup>[]>(
     () => [
@@ -144,6 +213,11 @@ export default function GroupsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Trade Groups</h1>
         <div className="flex items-center space-x-2">
+          <AssetClassFilter
+            availableAssetClasses={availableAssetClasses}
+            selectedAssetClasses={selectedAssetClasses ?? []}
+            onChange={handleAssetClassChange}
+          />
           <select
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
             value={statusFilter}

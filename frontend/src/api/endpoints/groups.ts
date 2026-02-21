@@ -5,18 +5,32 @@
 import { getApiBase, getHeaders, handleResponse } from "./http";
 import type { TradeGroupDetail, TradeGroupListResponse, GroupChartData } from "../types";
 
+function applyAssetClassParams(
+  params: URLSearchParams,
+  assetClasses?: string[],
+): void {
+  if (assetClasses === undefined) return;
+  if (assetClasses.length > 0) {
+    params.set("asset_classes", assetClasses.join(","));
+  } else {
+    params.set("asset_classes", "");
+  }
+}
+
 export async function fetchGroups(
   page = 1,
   status?: string,
   symbol?: string,
   sort?: string,
-  order?: "asc" | "desc"
+  order?: "asc" | "desc",
+  assetClasses?: string[],
 ): Promise<TradeGroupListResponse> {
   const params = new URLSearchParams({ page: String(page) });
   if (status) params.set("status", status);
   if (symbol) params.set("symbol", symbol);
   if (sort) params.set("sort", sort);
   if (order) params.set("order", order);
+  applyAssetClassParams(params, assetClasses);
   const response = await fetch(`${getApiBase()}/groups?${params}`, {
     headers: getHeaders(),
   });
