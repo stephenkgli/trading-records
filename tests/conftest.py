@@ -3,8 +3,7 @@ Shared pytest fixtures for trading-records test suite.
 
 Provides:
 - SQLite in-memory database session (lightweight, no external deps)
-- FastAPI TestClient with database and auth overrides
-- Auth header fixture
+- FastAPI TestClient with database override
 - Common test data factories
 - Fixture data loaders
 """
@@ -15,7 +14,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Generator
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -113,71 +111,21 @@ def db_session(engine) -> Generator[Session, None, None]:
 
 
 # ---------------------------------------------------------------------------
-# FastAPI TestClient — with auth enabled
+# FastAPI TestClient
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def client(db_session) -> Generator[TestClient, None, None]:
-    """
-    Provide a FastAPI TestClient with overridden database session and
-    API key set to 'test-api-key-12345'.
-
-    The auth middleware reads backend.config.settings.api_key directly,
-    so we patch it at module level.
-    """
+    """Provide a FastAPI TestClient with overridden database session."""
     def override_get_db():
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with patch("backend.auth.settings") as mock_settings, \
-         patch("backend.main.settings") as mock_main_settings:
-        mock_settings.api_key = "test-api-key-12345"
-        mock_main_settings.api_key = "test-api-key-12345"
-        mock_main_settings.cors_origins_list = ["http://localhost:3000"]
-
-        with TestClient(app, raise_server_exceptions=False) as c:
-            yield c
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
 
     app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client_no_auth(db_session) -> Generator[TestClient, None, None]:
-    """
-    Provide a TestClient where API_KEY is empty (auth disabled).
-    """
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    with patch("backend.auth.settings") as mock_settings, \
-         patch("backend.main.settings") as mock_main_settings:
-        mock_settings.api_key = ""
-        mock_main_settings.api_key = ""
-        mock_main_settings.cors_origins_list = ["http://localhost:3000"]
-
-        with TestClient(app, raise_server_exceptions=False) as c:
-            yield c
-
-    app.dependency_overrides.clear()
-
-
-# ---------------------------------------------------------------------------
-# Auth header
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def auth_headers() -> dict[str, str]:
-    """Return headers with the correct test API key."""
-    return {"X-API-Key": "test-api-key-12345"}
-
-
-@pytest.fixture
-def bad_auth_headers() -> dict[str, str]:
-    """Return headers with an incorrect API key."""
-    return {"X-API-Key": "wrong-key"}
 
 
 # ---------------------------------------------------------------------------

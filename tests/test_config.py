@@ -44,11 +44,6 @@ class TestBaseAppSettings:
         s = BaseAppSettings(cors_origins="")
         assert s.cors_origins_list == []
 
-    def test_default_api_key_empty(self):
-        """Default api_key should be empty (auth disabled)."""
-        s = BaseAppSettings()
-        assert s.api_key == ""
-
     def test_default_log_level(self):
         """Default log level should be INFO."""
         s = BaseAppSettings()

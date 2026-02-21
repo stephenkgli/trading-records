@@ -2,7 +2,6 @@
 Tests for the chart endpoint: GET /api/v1/groups/{group_id}/chart.
 
 Tests:
-- Auth required (401)
 - Group not found (404)
 - Successful chart data response with mocked market data
 - Marker generation for long/short groups
@@ -227,36 +226,26 @@ def _patch_yfinance_provider():
 # ---------------------------------------------------------------------------
 
 
-class TestGroupChartAuth:
-    """Test authentication requirements for the chart endpoint."""
-
-    def test_chart_endpoint_requires_auth(self, client, db_session):
-        """Request without auth header should return 401."""
-        group_id = _seed_closed_long_group(db_session)
-        resp = client.get(f"/api/v1/groups/{group_id}/chart")
-        assert resp.status_code == 401
-
-
 class TestGroupChartNotFound:
     """Test 404 handling for non-existent groups."""
 
-    def test_chart_endpoint_group_not_found(self, client, auth_headers):
+    def test_chart_endpoint_group_not_found(self, client):
         """Request with non-existent group_id should return 404."""
         fake_id = uuid.uuid4()
-        resp = client.get(f"/api/v1/groups/{fake_id}/chart", headers=auth_headers)
+        resp = client.get(f"/api/v1/groups/{fake_id}/chart")
         assert resp.status_code == 404
 
 
 class TestGroupChartSuccess:
     """Test successful chart data retrieval."""
 
-    def test_chart_endpoint_returns_data(self, client, auth_headers, db_session):
+    def test_chart_endpoint_returns_data(self, client, db_session):
         """Seeded closed group with mocked market data should return full chart response."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
-                f"/api/v1/groups/{group_id}/chart", headers=auth_headers
+                f"/api/v1/groups/{group_id}/chart"
             )
 
         assert resp.status_code == 200
@@ -283,13 +272,13 @@ class TestGroupChartSuccess:
         assert data["group"]["direction"] == "long"
         assert data["symbol"] == "AAPL"
 
-    def test_chart_markers_long_direction(self, client, auth_headers, db_session):
+    def test_chart_markers_long_direction(self, client, db_session):
         """Long group should have entry (belowBar/arrowUp) and exit (aboveBar/arrowDown) markers."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
-                f"/api/v1/groups/{group_id}/chart", headers=auth_headers
+                f"/api/v1/groups/{group_id}/chart"
             )
 
         assert resp.status_code == 200
@@ -304,13 +293,13 @@ class TestGroupChartSuccess:
         assert exit_marker["position"] == "aboveBar"
         assert exit_marker["shape"] == "arrowDown"
 
-    def test_chart_markers_short_direction(self, client, auth_headers, db_session):
+    def test_chart_markers_short_direction(self, client, db_session):
         """Short group should have reversed marker positions."""
         group_id = _seed_closed_short_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
-                f"/api/v1/groups/{group_id}/chart", headers=auth_headers
+                f"/api/v1/groups/{group_id}/chart"
             )
 
         assert resp.status_code == 200
@@ -330,39 +319,37 @@ class TestGroupChartSuccess:
 class TestGroupChartParams:
     """Test custom interval and padding query parameters."""
 
-    def test_chart_with_custom_interval(self, client, auth_headers, db_session):
+    def test_chart_with_custom_interval(self, client, db_session):
         """Explicit interval param should be used instead of auto-detection."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
                 f"/api/v1/groups/{group_id}/chart?interval=15m",
-                headers=auth_headers,
             )
 
         assert resp.status_code == 200
         data = resp.json()
         assert data["interval"] == "15m"
 
-    def test_chart_with_custom_padding(self, client, auth_headers, db_session):
+    def test_chart_with_custom_padding(self, client, db_session):
         """Custom padding param should be accepted without error."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
                 f"/api/v1/groups/{group_id}/chart?padding=50",
-                headers=auth_headers,
             )
 
         assert resp.status_code == 200
 
-    def test_chart_auto_interval_selection(self, client, auth_headers, db_session):
+    def test_chart_auto_interval_selection(self, client, db_session):
         """Without explicit interval, stock groups should auto-select '1d'."""
         group_id = _seed_closed_long_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
-                f"/api/v1/groups/{group_id}/chart", headers=auth_headers
+                f"/api/v1/groups/{group_id}/chart"
             )
 
         assert resp.status_code == 200

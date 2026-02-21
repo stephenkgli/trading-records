@@ -19,7 +19,6 @@
 
 3. API Layer
 - FastAPI + `/api/v1` 路由
-- API Key 鉴权
 - 统一错误响应与结构化日志
 
 4. Storage
@@ -90,7 +89,6 @@ npm run dev
 
 ```env
 DATABASE_URL=postgresql://trading:trading@localhost:5432/trading_records
-API_KEY=
 CORS_ORIGINS=http://localhost:3000,http://localhost:8000
 
 DATABENTO_API_KEY=

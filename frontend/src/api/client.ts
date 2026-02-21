@@ -1,6 +1,5 @@
 /**
  * API client for the Trading Records backend.
- * Reads API key from localStorage and includes it in all requests.
  */
 
 import {

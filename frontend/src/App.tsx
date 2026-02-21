@@ -5,7 +5,6 @@ import GroupsPage from "./pages/GroupsPage";
 import GroupDetailPage from "./pages/GroupDetailPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ImportPage from "./pages/ImportPage";
-import SettingsPage from "./pages/SettingsPage";
 
 function App() {
   return (
@@ -16,7 +15,6 @@ function App() {
         <Route path="groups/:id" element={<GroupDetailPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="import" element={<ImportPage />} />
-        <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>
   );

@@ -5,7 +5,6 @@ Verifies that the analytics refactoring preserves identical behavior:
 - Response JSON shapes unchanged
 - Date filtering works the same
 - Empty DB returns sensible defaults
-- Auth requirements preserved
 - Calendar requires year/month params (422 without)
 - Query parameters work: from, to, account_id
 
@@ -24,53 +23,32 @@ import pytest
 class TestEndpointStatusCodes:
     """Verify all 5 endpoints return correct status codes."""
 
-    def test_daily_200(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_daily_200(self, client, db_session, seed_contract_analytics_data):
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/daily", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/daily")
         assert resp.status_code == 200
 
-    def test_calendar_200(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_calendar_200(self, client, db_session, seed_contract_analytics_data):
         seed_contract_analytics_data()
         resp = client.get(
             "/api/v1/analytics/calendar?year=2025&month=3",
-            headers=auth_headers,
         )
         assert resp.status_code == 200
 
-    def test_by_symbol_200(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_by_symbol_200(self, client, db_session, seed_contract_analytics_data):
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/by-symbol", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/by-symbol")
         assert resp.status_code == 200
 
-    def test_by_strategy_200(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_by_strategy_200(self, client, db_session, seed_contract_analytics_data):
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/by-strategy", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/by-strategy")
         assert resp.status_code == 200
 
-    def test_performance_200(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_performance_200(self, client, db_session, seed_contract_analytics_data):
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/performance", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/performance")
         assert resp.status_code == 200
-
-
-# ===========================================================================
-# Auth requirement tests
-# ===========================================================================
-
-class TestAuthRequirements:
-    """Verify all endpoints require authentication."""
-
-    @pytest.mark.parametrize("path", [
-        "/api/v1/analytics/daily",
-        "/api/v1/analytics/calendar?year=2025&month=1",
-        "/api/v1/analytics/by-symbol",
-        "/api/v1/analytics/by-strategy",
-        "/api/v1/analytics/performance",
-    ])
-    def test_requires_auth(self, client, path):
-        """All analytics endpoints should return 401 without auth."""
-        resp = client.get(path)
-        assert resp.status_code == 401
 
 
 # ===========================================================================
@@ -80,10 +58,10 @@ class TestAuthRequirements:
 class TestResponseShapes:
     """Verify response JSON shapes are unchanged after refactoring."""
 
-    def test_daily_shape(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_daily_shape(self, client, db_session, seed_contract_analytics_data):
         """Daily response should be list of objects with expected keys."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/daily", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/daily")
         data = resp.json()
         assert isinstance(data, list)
         if len(data) > 0:
@@ -96,12 +74,11 @@ class TestResponseShapes:
                 f"Missing keys in daily response: {expected_keys - row.keys()}"
             )
 
-    def test_calendar_shape(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_calendar_shape(self, client, db_session, seed_contract_analytics_data):
         """Calendar response should be list of objects with date, net_pnl, trade_count."""
         seed_contract_analytics_data()
         resp = client.get(
             "/api/v1/analytics/calendar?year=2025&month=3",
-            headers=auth_headers,
         )
         data = resp.json()
         assert isinstance(data, list)
@@ -112,10 +89,10 @@ class TestResponseShapes:
                 f"Missing keys in calendar response: {expected_keys - row.keys()}"
             )
 
-    def test_by_symbol_shape(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_by_symbol_shape(self, client, db_session, seed_contract_analytics_data):
         """By-symbol response should be list with symbol, net_pnl, counts."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/by-symbol", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/by-symbol")
         data = resp.json()
         assert isinstance(data, list)
         if len(data) > 0:
@@ -125,10 +102,10 @@ class TestResponseShapes:
                 f"Missing keys in by-symbol response: {expected_keys - row.keys()}"
             )
 
-    def test_by_strategy_shape(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_by_strategy_shape(self, client, db_session, seed_contract_analytics_data):
         """By-strategy response should be list with strategy_tag, net_pnl, counts."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/by-strategy", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/by-strategy")
         data = resp.json()
         assert isinstance(data, list)
         if len(data) > 0:
@@ -138,10 +115,10 @@ class TestResponseShapes:
                 f"Missing keys in by-strategy response: {expected_keys - row.keys()}"
             )
 
-    def test_performance_shape(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_performance_shape(self, client, db_session, seed_contract_analytics_data):
         """Performance response should be single object with all metric keys."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/performance", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/performance")
         data = resp.json()
         assert isinstance(data, dict)
         expected_keys = {
@@ -161,39 +138,38 @@ class TestResponseShapes:
 class TestEmptyDatabase:
     """Verify sensible defaults when DB has no data."""
 
-    def test_daily_empty(self, client, auth_headers):
-        resp = client.get("/api/v1/analytics/daily", headers=auth_headers)
+    def test_daily_empty(self, client):
+        resp = client.get("/api/v1/analytics/daily")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 0
 
-    def test_calendar_empty(self, client, auth_headers):
+    def test_calendar_empty(self, client):
         resp = client.get(
             "/api/v1/analytics/calendar?year=2024&month=6",
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 0
 
-    def test_by_symbol_empty(self, client, auth_headers):
-        resp = client.get("/api/v1/analytics/by-symbol", headers=auth_headers)
+    def test_by_symbol_empty(self, client):
+        resp = client.get("/api/v1/analytics/by-symbol")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 0
 
-    def test_by_strategy_empty(self, client, auth_headers):
-        resp = client.get("/api/v1/analytics/by-strategy", headers=auth_headers)
+    def test_by_strategy_empty(self, client):
+        resp = client.get("/api/v1/analytics/by-strategy")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 0
 
-    def test_performance_empty(self, client, auth_headers):
-        resp = client.get("/api/v1/analytics/performance", headers=auth_headers)
+    def test_performance_empty(self, client):
+        resp = client.get("/api/v1/analytics/performance")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
@@ -209,12 +185,11 @@ class TestEmptyDatabase:
 class TestDateFiltering:
     """Verify date filtering works the same after refactoring."""
 
-    def test_daily_date_range_filters(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_daily_date_range_filters(self, client, db_session, seed_contract_analytics_data):
         """Daily endpoint with from/to should filter results."""
         seed_contract_analytics_data()
         resp = client.get(
             "/api/v1/analytics/daily?from=2025-03-10&to=2025-03-10",
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -223,23 +198,21 @@ class TestDateFiltering:
         for row in data:
             assert row["date"] == "2025-03-10"
 
-    def test_by_symbol_date_range(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_by_symbol_date_range(self, client, db_session, seed_contract_analytics_data):
         """By-symbol endpoint with from/to should filter results."""
         seed_contract_analytics_data()
         resp = client.get(
             "/api/v1/analytics/by-symbol?from=2025-03-10&to=2025-03-10",
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
 
-    def test_performance_date_range(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_performance_date_range(self, client, db_session, seed_contract_analytics_data):
         """Performance endpoint with from/to should filter results."""
         seed_contract_analytics_data()
         resp = client.get(
             "/api/v1/analytics/performance?from=2025-03-10&to=2025-03-11",
-            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -254,32 +227,29 @@ class TestDateFiltering:
 class TestCalendarParams:
     """Verify calendar endpoint param requirements."""
 
-    def test_calendar_missing_params_422(self, client, auth_headers):
+    def test_calendar_missing_params_422(self, client):
         """Calendar without year/month should return 422."""
-        resp = client.get("/api/v1/analytics/calendar", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/calendar")
         assert resp.status_code == 422
 
-    def test_calendar_missing_month_422(self, client, auth_headers):
+    def test_calendar_missing_month_422(self, client):
         """Calendar with year but no month should return 422."""
         resp = client.get(
             "/api/v1/analytics/calendar?year=2025",
-            headers=auth_headers,
         )
         assert resp.status_code == 422
 
-    def test_calendar_invalid_month_422(self, client, auth_headers):
+    def test_calendar_invalid_month_422(self, client):
         """Calendar with month > 12 should return 422."""
         resp = client.get(
             "/api/v1/analytics/calendar?year=2025&month=13",
-            headers=auth_headers,
         )
         assert resp.status_code == 422
 
-    def test_calendar_month_zero_422(self, client, auth_headers):
+    def test_calendar_month_zero_422(self, client):
         """Calendar with month=0 should return 422."""
         resp = client.get(
             "/api/v1/analytics/calendar?year=2025&month=0",
-            headers=auth_headers,
         )
         assert resp.status_code == 422
 
@@ -291,10 +261,10 @@ class TestCalendarParams:
 class TestComputedValues:
     """Verify that computed values are correct after refactoring."""
 
-    def test_daily_pnl_values(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_daily_pnl_values(self, client, db_session, seed_contract_analytics_data):
         """Daily summaries should compute P&L correctly."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/daily", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/daily")
         data = resp.json()
 
         # Find the 2025-03-10 row (GOOG win day)
@@ -303,10 +273,10 @@ class TestComputedValues:
         row = day_10[0]
         assert row["trade_count"] == 2
 
-    def test_performance_metrics_consistent(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_performance_metrics_consistent(self, client, db_session, seed_contract_analytics_data):
         """Performance metrics should be internally consistent."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/performance", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/performance")
         data = resp.json()
 
         # net_pnl = total_pnl - total_commissions
@@ -321,17 +291,17 @@ class TestComputedValues:
         # win_rate should be percentage
         assert 0 <= data["win_rate"] <= 100
 
-    def test_performance_not_a_list(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_performance_not_a_list(self, client, db_session, seed_contract_analytics_data):
         """Performance endpoint should return a single object, not a list."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/performance", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/performance")
         data = resp.json()
         assert isinstance(data, dict)
         assert not isinstance(data, list)
 
-    def test_daily_is_a_list(self, client, auth_headers, db_session, seed_contract_analytics_data):
+    def test_daily_is_a_list(self, client, db_session, seed_contract_analytics_data):
         """Daily endpoint should return a list."""
         seed_contract_analytics_data()
-        resp = client.get("/api/v1/analytics/daily", headers=auth_headers)
+        resp = client.get("/api/v1/analytics/daily")
         data = resp.json()
         assert isinstance(data, list)

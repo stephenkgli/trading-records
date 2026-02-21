@@ -9,23 +9,13 @@ export function getApiBase(): string {
 }
 
 export function getHeaders(): HeadersInit {
-  const headers: HeadersInit = {
+  return {
     "Content-Type": "application/json",
   };
-  const apiKey = localStorage.getItem("apiKey");
-  if (apiKey) {
-    headers["X-API-Key"] = apiKey;
-  }
-  return headers;
 }
 
 export function getUploadHeaders(): HeadersInit {
-  const headers: HeadersInit = {};
-  const apiKey = localStorage.getItem("apiKey");
-  if (apiKey) {
-    headers["X-API-Key"] = apiKey;
-  }
-  return headers;
+  return {};
 }
 
 export async function handleResponse<T>(response: Response): Promise<T> {

@@ -130,7 +130,7 @@ def _make_bars(count: int = 5) -> list[OHLCVBar]:
 class TestChartEndpoint:
     """Integration tests for the chart endpoint."""
 
-    def test_cache_hit_skips_provider(self, client, auth_headers, db_session):
+    def test_cache_hit_skips_provider(self, client, db_session):
         """When cache has data, provider should not be called."""
         group_id = _seed_group_with_legs(db_session)
 
@@ -146,7 +146,6 @@ class TestChartEndpoint:
             with patch("backend.api.groups._get_provider") as mock_get_provider:
                 response = client.get(
                     f"/api/v1/groups/{group_id}/chart?interval=1d",
-                    headers=auth_headers,
                 )
 
                 assert response.status_code == 200
@@ -155,7 +154,7 @@ class TestChartEndpoint:
                 # Provider should NOT have been called
                 mock_get_provider.assert_not_called()
 
-    def test_cache_miss_fetches_and_caches(self, client, auth_headers, db_session):
+    def test_cache_miss_fetches_and_caches(self, client, db_session):
         """When cache misses, provider is called and result is cached."""
         group_id = _seed_group_with_legs(db_session)
 
@@ -176,7 +175,6 @@ class TestChartEndpoint:
 
                 response = client.get(
                     f"/api/v1/groups/{group_id}/chart?interval=1d",
-                    headers=auth_headers,
                 )
 
                 assert response.status_code == 200
@@ -188,7 +186,7 @@ class TestChartEndpoint:
                 # Cache should have been populated
                 mock_cache_instance.put.assert_called_once()
 
-    def test_provider_error_returns_502(self, client, auth_headers, db_session):
+    def test_provider_error_returns_502(self, client, db_session):
         """ProviderError should result in HTTP 502."""
         group_id = _seed_group_with_legs(db_session)
 
@@ -206,13 +204,12 @@ class TestChartEndpoint:
 
                 response = client.get(
                     f"/api/v1/groups/{group_id}/chart?interval=1d",
-                    headers=auth_headers,
                 )
 
                 assert response.status_code == 502
                 assert "API down" in response.json()["detail"]
 
-    def test_rate_limit_returns_429(self, client, auth_headers, db_session):
+    def test_rate_limit_returns_429(self, client, db_session):
         """RateLimitError should result in HTTP 429."""
         group_id = _seed_group_with_legs(db_session)
 
@@ -232,13 +229,12 @@ class TestChartEndpoint:
 
                 response = client.get(
                     f"/api/v1/groups/{group_id}/chart?interval=1d",
-                    headers=auth_headers,
                 )
 
                 assert response.status_code == 429
                 assert "rate limit" in response.json()["detail"].lower()
 
-    def test_no_bars_returns_404(self, client, auth_headers, db_session):
+    def test_no_bars_returns_404(self, client, db_session):
         """When provider returns no bars, should get 200 with empty candles."""
         group_id = _seed_group_with_legs(db_session)
 
@@ -256,7 +252,6 @@ class TestChartEndpoint:
 
                 response = client.get(
                     f"/api/v1/groups/{group_id}/chart?interval=1d",
-                    headers=auth_headers,
                 )
 
                 assert response.status_code == 200
@@ -264,17 +259,16 @@ class TestChartEndpoint:
                 assert data["candles"] == []
                 assert len(data["markers"]) > 0
 
-    def test_nonexistent_group_returns_404(self, client, auth_headers):
+    def test_nonexistent_group_returns_404(self, client):
         """Request for a non-existent group should return 404."""
         fake_id = uuid.uuid4()
         response = client.get(
             f"/api/v1/groups/{fake_id}/chart",
-            headers=auth_headers,
         )
         assert response.status_code == 404
 
     def test_future_chart_uses_rth_cache_namespace(
-        self, client, auth_headers, db_session
+        self, client, db_session
     ):
         """Futures chart cache key should be isolated to RTH-only namespace."""
         group_id = _seed_future_group_with_legs(db_session)
@@ -287,7 +281,6 @@ class TestChartEndpoint:
 
             response = client.get(
                 f"/api/v1/groups/{group_id}/chart?interval=5m",
-                headers=auth_headers,
             )
 
             assert response.status_code == 200

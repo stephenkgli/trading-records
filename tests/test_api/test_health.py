@@ -30,7 +30,7 @@ class TestHealthEndpoint:
         data = response.json()
         assert "status" in data
 
-    def test_health_with_auth_also_works(self, client, auth_headers):
+    def test_health_with_auth_also_works(self, client):
         """GET /health should also work if auth headers are provided."""
-        response = client.get("/health", headers=auth_headers)
+        response = client.get("/health")
         assert response.status_code == 200

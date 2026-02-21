@@ -65,14 +65,14 @@ class TestAppException:
 class TestExceptionHandlerResponses:
     """Test that exception handlers produce the correct response format."""
 
-    def test_app_exception_response(self, client, auth_headers):
+    def test_app_exception_response(self, client):
         """AppException raised in a handler should return structured error."""
         # We'll test via the real app. A non-existent trade ID should return 404
         # (which goes through the http_exception_handler).
         import uuid
 
         fake_id = str(uuid.uuid4())
-        response = client.get(f"/api/v1/trades/{fake_id}", headers=auth_headers)
+        response = client.get(f"/api/v1/trades/{fake_id}")
         assert response.status_code == 404
         data = response.json()
         assert "detail" in data
@@ -80,10 +80,10 @@ class TestExceptionHandlerResponses:
         assert "code" in data["error"]
         assert "message" in data["error"]
 
-    def test_validation_error_response(self, client, auth_headers):
+    def test_validation_error_response(self, client):
         """Validation error should return 422 with structured error."""
         # Missing required params for calendar endpoint
-        response = client.get("/api/v1/analytics/calendar", headers=auth_headers)
+        response = client.get("/api/v1/analytics/calendar")
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data

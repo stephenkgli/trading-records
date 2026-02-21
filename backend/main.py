@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,10 +10,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.auth import APIKeyMiddleware
 from backend.config import settings
-from backend.logging_config import setup_logging
 from backend.exceptions import register_exception_handlers
+from backend.logging_config import setup_logging
 
 logger = structlog.get_logger(__name__)
 
@@ -23,13 +21,6 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown events."""
     setup_logging()
-
-    if not settings.api_key:
-        logger.warning(
-            "api_key_not_set",
-            message="API_KEY is not set. Authentication is disabled. "
-            "Set API_KEY environment variable for production.",
-        )
 
     # Start scheduler
     from backend.services.scheduler import start_scheduler, stop_scheduler
@@ -60,9 +51,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# API Key Auth
-app.add_middleware(APIKeyMiddleware)
 
 # Routers — aggregated from api/v1
 from backend.api.v1 import v1_router  # noqa: E402

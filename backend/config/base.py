@@ -18,7 +18,6 @@ class BaseAppSettings(BaseSettings):
     database_url: str = "postgresql://trading:trading@localhost:5432/trading_records"
 
     # API
-    api_key: str = ""
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
 
     # Databento
