@@ -1,20 +1,16 @@
 """Import service — orchestrates import operations.
 
-Encapsulates all business logic for CSV uploads, Flex Query triggers,
-Tradovate triggers, and import log queries. API handlers delegate here
-so they only handle request/response mapping.
+Encapsulates all business logic for CSV uploads and import log queries.
+API handlers delegate here so they only handle request/response mapping.
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.ingestion.csv_importer import CSVImporter
-from backend.ingestion.ibkr_flex import IBKRFlexIngester
 from backend.models.import_log import ImportLog
 from backend.models.trade import Trade
 from backend.schemas.import_result import (
@@ -53,38 +49,6 @@ class ImportService:
         logger.info("csv_import_start", filename=filename, size=len(file_content))
         importer = CSVImporter()
         return importer.import_csv(file_content, filename=filename, db=db)
-
-    def trigger_flex_query(self, db: Session) -> ImportResult:
-        """Trigger an IBKR Flex Query import.
-
-        Args:
-            db: Database session.
-
-        Returns:
-            ImportResult summary.
-
-        Raises:
-            ValueError: When credentials are missing.
-        """
-        ingester = IBKRFlexIngester()
-        return ingester.fetch_and_import(db=db)
-
-    def trigger_tradovate(self, db: Session) -> ImportResult:
-        """Trigger a Tradovate API import.
-
-        Args:
-            db: Database session.
-
-        Returns:
-            ImportResult summary.
-
-        Raises:
-            ValueError: When credentials are missing.
-        """
-        from backend.ingestion.tradovate import TradovateIngester
-
-        ingester = TradovateIngester()
-        return ingester.fetch_and_import(db=db)
 
     def list_import_logs(
         self,

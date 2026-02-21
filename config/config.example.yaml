@@ -10,23 +10,6 @@ api:
     - "http://localhost:3000"
     - "http://localhost:8000"
 
-ibkr:
-  flex_token: ""  # From IBKR Account Management > Flex Web Service
-  query_id: ""  # Flex Query ID configured in IBKR
-  schedule: "0 6 * * *"  # Daily at 6 AM UTC
-  poll_interval_seconds: 10
-  poll_max_attempts: 10
-
-tradovate:
-  environment: "demo"  # "live" or "demo"
-  username: ""
-  password: ""
-  app_id: "trading-records"
-  client_id: ""
-  client_secret: ""
-  device_id: ""  # Generate once, store permanently
-  schedule: "0 6 * * *"
-
 logging:
   level: "INFO"
   format: "json"  # "json" or "console"

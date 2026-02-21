@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import CsvUpload from "../components/CsvUpload";
 import {
   uploadCsv,
-  triggerFlexQuery,
   fetchImportLogs,
   type ImportResult,
 } from "../api/client";
@@ -14,15 +13,6 @@ export default function ImportPage() {
 
   const csvMutation = useMutation({
     mutationFn: uploadCsv,
-    onSuccess: (result) => {
-      setLastResult(result);
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
-      queryClient.invalidateQueries({ queryKey: ["importLogs"] });
-    },
-  });
-
-  const flexMutation = useMutation({
-    mutationFn: triggerFlexQuery,
     onSuccess: (result) => {
       setLastResult(result);
       queryClient.invalidateQueries({ queryKey: ["trades"] });
@@ -49,25 +39,6 @@ export default function ImportPage() {
         {csvMutation.error && (
           <p className="mt-2 text-sm text-red-500">
             {(csvMutation.error as Error).message}
-          </p>
-        )}
-      </div>
-
-      {/* Manual Triggers */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-medium mb-4">Manual Import</h2>
-        <div className="flex space-x-4">
-          <button
-            onClick={() => flexMutation.mutate()}
-            disabled={flexMutation.isPending}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            {flexMutation.isPending ? "Running..." : "Trigger IBKR Flex Query"}
-          </button>
-        </div>
-        {flexMutation.error && (
-          <p className="mt-2 text-sm text-red-500">
-            {(flexMutation.error as Error).message}
           </p>
         )}
       </div>

@@ -69,7 +69,9 @@ class TestIBKRCSVImport:
         assert result.records_imported > 0
         assert result.status == "success"
 
-    def test_ibkr_csv_correct_count(self, db_session, ibkr_activity_csv):
+    def test_ibkr_csv_correct_count(
+        self, db_session, ibkr_activity_csv, ibkr_expected_trade_count
+    ):
         """Should import the trade data rows (excluding headers/totals/subtotals)."""
         importer = CSVImporter()
         result = importer.import_csv(
@@ -78,8 +80,7 @@ class TestIBKRCSVImport:
             db=db_session,
         )
 
-        # 5 data rows in the fixture (AAPL buy, AAPL sell, MSFT buy, option, future)
-        assert result.records_total == 5
+        assert result.records_total == ibkr_expected_trade_count
 
     def test_ibkr_csv_no_trades(self, db_session, ibkr_activity_no_trades_csv):
         """IBKR CSV with no trade rows should import 0 records."""
@@ -141,12 +142,13 @@ class TestIBKRCSVParsing:
             assert trade.broker == "ibkr"
             assert trade.symbol is not None
 
-    def test_parse_ibkr_csv_skips_subtotals(self, ibkr_activity_csv):
+    def test_parse_ibkr_csv_skips_subtotals(
+        self, ibkr_activity_csv, ibkr_expected_trade_count
+    ):
         """Subtotal and Total rows should not be parsed as trades."""
         importer = CSVImporter()
         trades = importer._parse_ibkr_csv(ibkr_activity_csv, "test.csv")
-        # Should only have data rows, not SubTotal/Total
-        assert len(trades) == 5  # AAPL buy, AAPL sell, MSFT, option, future
+        assert len(trades) == ibkr_expected_trade_count
 
     def test_parse_ibkr_csv_datetime_formats(self):
         """Various IBKR datetime formats should be parsed."""

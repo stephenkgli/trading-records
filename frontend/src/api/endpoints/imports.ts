@@ -21,22 +21,6 @@ export async function uploadCsv(file: File): Promise<ImportResult> {
   return handleResponse(response);
 }
 
-export async function triggerFlexQuery(): Promise<ImportResult> {
-  const response = await fetch(`${getApiBase()}/import/flex/trigger`, {
-    method: "POST",
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
-export async function triggerTradovate(): Promise<ImportResult> {
-  const response = await fetch(`${getApiBase()}/import/tradovate/trigger`, {
-    method: "POST",
-    headers: getHeaders(),
-  });
-  return handleResponse(response);
-}
-
 export async function fetchImportLogs(
   page = 1
 ): Promise<ImportLogListResponse> {

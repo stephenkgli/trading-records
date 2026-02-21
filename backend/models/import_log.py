@@ -21,7 +21,7 @@ class ImportLog(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     source: Mapped[str] = mapped_column(
-        String(50), nullable=False, comment="flex_query | tradovate_api | csv"
+        String(50), nullable=False, comment="csv | custom source"
     )
     status: Mapped[str] = mapped_column(
         String(20),

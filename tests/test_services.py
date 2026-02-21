@@ -126,13 +126,15 @@ class TestImportServiceCSV:
         assert result.records_imported > 0
         assert result.status == "success"
 
-    def test_import_csv_tradovate_perf(self, db_session, tradovate_performance_csv):
+    def test_import_csv_tradovate_perf(
+        self, db_session, tradovate_performance_csv, tradovate_expected_trade_count
+    ):
         """ImportService.import_csv should import Tradovate Performance CSV."""
         svc = ImportService()
         result = svc.import_csv(
             tradovate_performance_csv, filename="Performance.csv", db=db_session
         )
-        assert result.records_imported == 20
+        assert result.records_imported == tradovate_expected_trade_count
 
     def test_import_csv_bytes(self, db_session, ibkr_activity_csv):
         """ImportService should handle bytes input."""

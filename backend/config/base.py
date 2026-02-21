@@ -21,23 +21,6 @@ class BaseAppSettings(BaseSettings):
     api_key: str = ""
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
 
-    # IBKR Flex Query
-    ibkr_flex_token: str = ""
-    ibkr_query_id: str = ""
-    ibkr_schedule: str = "0 6 * * *"
-    ibkr_poll_interval_seconds: int = 10
-    ibkr_poll_max_attempts: int = 10
-
-    # Tradovate
-    tradovate_environment: str = "demo"
-    tradovate_username: str = ""
-    tradovate_password: str = ""
-    tradovate_app_id: str = "trading-records"
-    tradovate_client_id: str = ""
-    tradovate_client_secret: str = ""
-    tradovate_device_id: str = ""
-    tradovate_schedule: str = "0 6 * * *"
-
     # Databento
     databento_api_key: str = ""
 

@@ -12,12 +12,28 @@ Tests cover:
 Reference: Performance.csv real data from Tradovate
 """
 
+import csv
+import io
 from datetime import timezone
 from decimal import Decimal
 
 import pytest
 
 from backend.ingestion.csv_importer import CSVImporter, CSVFormat
+
+
+def _tradovate_perf_row_count(text: str) -> int:
+    """Count valid Tradovate performance rows in CSV text."""
+    count = 0
+    for row in csv.DictReader(io.StringIO(text)):
+        symbol = (row.get("symbol") or "").strip()
+        qty_raw = (row.get("qty") or "").strip()
+        if not symbol or not qty_raw:
+            continue
+        if Decimal(qty_raw) == 0:
+            continue
+        count += 1
+    return count
 
 
 # ===========================================================================
@@ -76,18 +92,19 @@ class TestTradovatePerfParsing:
         trades = importer._parse_tradovate_performance_csv(
             tradovate_performance_csv, "Performance.csv"
         )
-        # fixture 有 10 行数据，应产生 20 条交易
-        assert len(trades) == 20
+        expected = _tradovate_perf_row_count(tradovate_performance_csv) * 2
+        assert len(trades) == expected
 
     def test_buy_and_sell_sides(self, importer, tradovate_performance_csv):
         """Trades should alternate between buy and sell for each row pair."""
         trades = importer._parse_tradovate_performance_csv(
             tradovate_performance_csv, "Performance.csv"
         )
+        expected_rows = _tradovate_perf_row_count(tradovate_performance_csv)
         buy_count = sum(1 for t in trades if t.side == "buy")
         sell_count = sum(1 for t in trades if t.side == "sell")
-        assert buy_count == 10
-        assert sell_count == 10
+        assert buy_count == expected_rows
+        assert sell_count == expected_rows
 
     def test_first_row_buy_price(self, importer, tradovate_performance_csv):
         """First row buy price should be 6117.75."""
@@ -289,16 +306,18 @@ class TestTradovatePerfImport:
         assert result.status == "success"
         assert result.records_imported > 0
 
-    def test_import_correct_count(self, db_session, tradovate_performance_csv):
-        """Should import 20 trades (10 rows × 2 trades per row)."""
+    def test_import_correct_count(
+        self, db_session, tradovate_performance_csv, tradovate_expected_trade_count
+    ):
+        """Should import all trades derived from real Tradovate rows."""
         importer = CSVImporter()
         result = importer.import_csv(
             file_content=tradovate_performance_csv,
             filename="Performance.csv",
             db=db_session,
         )
-        assert result.records_total == 20
-        assert result.records_imported == 20
+        assert result.records_total == tradovate_expected_trade_count
+        assert result.records_imported == tradovate_expected_trade_count
 
     def test_import_source_is_csv(self, db_session, tradovate_performance_csv):
         """Import result source should be 'csv'."""
@@ -310,7 +329,9 @@ class TestTradovatePerfImport:
         )
         assert result.source == "csv"
 
-    def test_import_no_duplicates_on_reimport(self, db_session, tradovate_performance_csv):
+    def test_import_no_duplicates_on_reimport(
+        self, db_session, tradovate_performance_csv, tradovate_expected_trade_count
+    ):
         """Re-importing the same file should skip all records as duplicates."""
         importer = CSVImporter()
         result1 = importer.import_csv(
@@ -318,7 +339,7 @@ class TestTradovatePerfImport:
             filename="Performance.csv",
             db=db_session,
         )
-        assert result1.records_imported == 20
+        assert result1.records_imported == tradovate_expected_trade_count
 
         result2 = importer.import_csv(
             file_content=tradovate_performance_csv,
@@ -326,9 +347,11 @@ class TestTradovatePerfImport:
             db=db_session,
         )
         assert result2.records_imported == 0
-        assert result2.records_skipped_dup == 20
+        assert result2.records_skipped_dup == tradovate_expected_trade_count
 
-    def test_import_with_bytes_input(self, db_session, tradovate_performance_csv):
+    def test_import_with_bytes_input(
+        self, db_session, tradovate_performance_csv, tradovate_expected_trade_count
+    ):
         """Import should work with bytes input (as received from file upload)."""
         importer = CSVImporter()
         result = importer.import_csv(
@@ -337,7 +360,7 @@ class TestTradovatePerfImport:
             db=db_session,
         )
         assert result.status == "success"
-        assert result.records_imported == 20
+        assert result.records_imported == tradovate_expected_trade_count
 
     def test_import_windows_line_endings(self, db_session):
         """CSV with Windows \\r\\n line endings should parse correctly."""

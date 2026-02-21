@@ -3,25 +3,12 @@ Tests for the import API endpoints.
 
 Verifies:
 - CSV upload (POST /api/v1/import/csv)
-- Flex trigger (POST /api/v1/import/flex/trigger)
 - Import logs (GET /api/v1/import/logs)
 
 The response model for logs is ImportLogListResponse with field: logs (not items).
 
 Reference: design-doc-final.md Section 6.1
 """
-
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-import uuid
-
-import pytest
-
-from backend.schemas.import_result import ImportResult
-
-
-FIXTURES_DIR = Path(__file__).parents[1] / "fixtures"
-
 
 # ===========================================================================
 # CSV Upload
@@ -42,7 +29,11 @@ class TestCSVUpload:
         assert "records_imported" in data
 
     def test_upload_tradovate_performance_csv(
-        self, client, auth_headers, tradovate_performance_csv
+        self,
+        client,
+        auth_headers,
+        tradovate_performance_csv,
+        tradovate_expected_trade_count,
     ):
         """Uploading Tradovate Performance CSV should succeed with full count."""
         response = client.post(
@@ -52,8 +43,8 @@ class TestCSVUpload:
         )
         assert response.status_code in (200, 201)
         data = response.json()
-        assert data["records_total"] == 20
-        assert data["records_imported"] == 20
+        assert data["records_total"] == tradovate_expected_trade_count
+        assert data["records_imported"] == tradovate_expected_trade_count
 
     def test_upload_empty_csv(self, client, auth_headers):
         """Uploading an empty CSV should return 400."""
@@ -79,69 +70,6 @@ class TestCSVUpload:
             headers=auth_headers,
         )
         assert response.status_code == 422
-
-
-# ===========================================================================
-# Flex Trigger
-# ===========================================================================
-
-class TestFlexTrigger:
-    """Test manual Flex Query trigger endpoint."""
-
-    @patch("backend.services.import_service.IBKRFlexIngester")
-    def test_trigger_flex_query(self, mock_ingester_cls, client, auth_headers):
-        """POST /api/v1/import/flex/trigger should trigger an import."""
-        mock_result = ImportResult(
-            import_log_id=uuid.uuid4(),
-            source="flex_query",
-            status="success",
-            records_total=5,
-            records_imported=5,
-            records_skipped_dup=0,
-            records_failed=0,
-        )
-        mock_ingester_cls.return_value.fetch_and_import.return_value = mock_result
-
-        response = client.post("/api/v1/import/flex/trigger", headers=auth_headers)
-        assert response.status_code in (200, 201, 202)
-
-    def test_flex_trigger_requires_auth(self, client):
-        """Flex trigger should require authentication."""
-        response = client.post("/api/v1/import/flex/trigger")
-        assert response.status_code == 401
-
-
-# ===========================================================================
-# Tradovate Trigger
-# ===========================================================================
-
-class TestTradovateTrigger:
-    """Test manual Tradovate trigger endpoint."""
-
-    @patch("backend.ingestion.tradovate.TradovateIngester")
-    def test_trigger_tradovate(self, mock_ingester_cls, client, auth_headers):
-        """POST /api/v1/import/tradovate/trigger should trigger an import."""
-        mock_result = ImportResult(
-            import_log_id=uuid.uuid4(),
-            source="tradovate_api",
-            status="success",
-            records_total=3,
-            records_imported=3,
-            records_skipped_dup=0,
-            records_failed=0,
-        )
-        mock_ingester_cls.return_value.fetch_and_import.return_value = mock_result
-
-        response = client.post("/api/v1/import/tradovate/trigger", headers=auth_headers)
-        assert response.status_code in (200, 201, 202)
-        data = response.json()
-        assert data["source"] == "tradovate_api"
-        assert data["records_imported"] == 3
-
-    def test_tradovate_trigger_requires_auth(self, client):
-        """Tradovate trigger should require authentication."""
-        response = client.post("/api/v1/import/tradovate/trigger")
-        assert response.status_code == 401
 
 
 # ===========================================================================

@@ -9,7 +9,8 @@ Provides:
 - Fixture data loaders
 """
 
-import json
+import csv
+import io
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -184,63 +185,51 @@ def bad_auth_headers() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def ibkr_flex_sample_xml() -> str:
-    """Load the IBKR Flex Query sample XML fixture."""
-    return (FIXTURES_DIR / "ibkr_flex_sample.xml").read_text()
-
-
-@pytest.fixture
-def ibkr_flex_empty_xml() -> str:
-    """Load the IBKR Flex Query empty XML fixture (zero trades)."""
-    return (FIXTURES_DIR / "ibkr_flex_empty.xml").read_text()
-
-
-@pytest.fixture
-def ibkr_flex_malformed_xml() -> str:
-    """Load the malformed IBKR Flex Query XML fixture."""
-    return (FIXTURES_DIR / "ibkr_flex_malformed.xml").read_text()
-
-
-@pytest.fixture
 def ibkr_activity_csv() -> str:
-    """Load the IBKR Activity Statement CSV fixture."""
-    return (FIXTURES_DIR / "ibkr_activity.csv").read_text()
+    """Load IBKR Activity Statement CSV fixture."""
+    return (FIXTURES_DIR / "ibkr_activity.csv").read_text(encoding="utf-8-sig")
 
 
 @pytest.fixture
 def ibkr_activity_no_trades_csv() -> str:
-    """Load the IBKR Activity Statement CSV with no trades."""
-    return (FIXTURES_DIR / "ibkr_activity_no_trades.csv").read_text()
-
-
-@pytest.fixture
-def tradovate_fills_json() -> list[dict]:
-    """Load the Tradovate fills JSON fixture."""
-    return json.loads((FIXTURES_DIR / "tradovate_fills.json").read_text())
-
-
-@pytest.fixture
-def tradovate_contracts_json() -> dict:
-    """Load the Tradovate contracts JSON fixture."""
-    return json.loads((FIXTURES_DIR / "tradovate_contracts.json").read_text())
-
-
-@pytest.fixture
-def tradovate_auth_response_json() -> dict:
-    """Load the Tradovate OAuth auth response fixture."""
-    return json.loads((FIXTURES_DIR / "tradovate_auth_response.json").read_text())
+    """Load IBKR Activity Statement CSV fixture with no trades."""
+    return (FIXTURES_DIR / "ibkr_activity_no_trades.csv").read_text(
+        encoding="utf-8-sig"
+    )
 
 
 @pytest.fixture
 def tradovate_export_csv() -> str:
-    """Load the Tradovate export CSV fixture."""
-    return (FIXTURES_DIR / "tradovate_export.csv").read_text()
+    """Load Tradovate export CSV fixture."""
+    return (FIXTURES_DIR / "tradovate_export.csv").read_text(encoding="utf-8-sig")
 
 
 @pytest.fixture
 def tradovate_performance_csv() -> str:
-    """Load the Tradovate Performance report CSV fixture."""
-    return (FIXTURES_DIR / "tradovate_performance.csv").read_text()
+    """Load Tradovate Performance report CSV fixture."""
+    return (FIXTURES_DIR / "tradovate_performance.csv").read_text(
+        encoding="utf-8-sig"
+    )
+
+
+@pytest.fixture
+def ibkr_expected_trade_count(ibkr_activity_csv: str) -> int:
+    """Expected IBKR trades from the fixture CSV."""
+    from backend.ingestion.csv_importer import CSVImporter
+
+    return len(CSVImporter()._parse_ibkr_csv(ibkr_activity_csv, "ibkr_activity.csv"))
+
+
+@pytest.fixture
+def tradovate_expected_trade_count(tradovate_performance_csv: str) -> int:
+    """Expected Tradovate trades from the fixture CSV (2 trades per row)."""
+    row_count = 0
+    for row in csv.DictReader(io.StringIO(tradovate_performance_csv)):
+        symbol = (row.get("symbol") or "").strip()
+        qty = (row.get("qty") or "").strip()
+        if symbol and qty and Decimal(qty) != 0:
+            row_count += 1
+    return row_count * 2
 
 
 # ---------------------------------------------------------------------------

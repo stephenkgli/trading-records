@@ -1,4 +1,4 @@
-"""Import API endpoints — CSV upload, Flex trigger, import logs."""
+"""Import API endpoints — CSV upload and import logs."""
 
 from __future__ import annotations
 
@@ -43,36 +43,6 @@ async def upload_csv(
     except Exception as e:
         logger.error("csv_import_error", error=str(e))
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
-
-
-@router.post("/flex/trigger", response_model=ImportResult)
-def trigger_flex_query(
-    db: Session = Depends(get_db),
-    service: ImportService = Depends(get_import_service),
-):
-    """Manually trigger an IBKR Flex Query import."""
-    try:
-        return service.trigger_flex_query(db=db)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("flex_trigger_error", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Flex Query import failed: {str(e)}")
-
-
-@router.post("/tradovate/trigger", response_model=ImportResult)
-def trigger_tradovate(
-    db: Session = Depends(get_db),
-    service: ImportService = Depends(get_import_service),
-):
-    """Manually trigger a Tradovate API import."""
-    try:
-        return service.trigger_tradovate(db=db)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("tradovate_trigger_error", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Tradovate import failed: {str(e)}")
 
 
 @router.get("/logs", response_model=ImportLogListResponse)

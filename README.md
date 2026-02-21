@@ -1,6 +1,6 @@
 # Trading Records
 
-Self-hosted trading records system for capturing, normalizing, and analyzing trading data from Interactive Brokers (IBKR) and Tradovate, with full data ownership.
+Self-hosted trading records system for capturing, normalizing, and analyzing trading data from Interactive Brokers (IBKR) and Tradovate CSV exports, with full data ownership.
 
 ## Architecture
 
@@ -8,14 +8,14 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 +------------------+     +--------------------+     +------------------+
 |  Data Sources    |     |   Ingestion Layer  |     |      Core        |
 |                  |     |                    |     |                  |
-| IBKR Flex Query -+---->| ImportSource       |     |                  |
-| (XML over REST)  |     | (pluggable iface)  |     | Normalizer       |
+| CSV / XLSX      -+---->| ImportSource       |     |                  |
+| (Manual Upload)  |     | (pluggable iface)  |     | Normalizer       |
 |                  |     |                    |     | - Broker-specific|
-| Tradovate API   -+---->| Sources:           |     |   to unified     |
-| (JSON over REST) |     | - CsvSource        +---->|   NormalizedTrade|
-|                  |     | - FlexQuerySource  |     |                  |
-| CSV / XLSX      -+---->| - TradovateSource  |     | Validator        |
-| (Manual Upload)  |     |                    |     | - Required fields|
+|                  |     | Sources:           |     |   to unified     |
+|                  |     | - CsvSource        +---->|   NormalizedTrade|
+|                  |     |                    |     |                  |
+|                  |     |                    |     | Validator        |
+|                  |     |                    |     | - Required fields|
 |                  |     | IngestionPipeline  |     | - Range checks   |
 +------------------+     | (orchestrator)     |     | - Timestamp sanity
                          +--------------------+     |                  |
@@ -93,7 +93,7 @@ GET /api/v1/groups/{id}/chart
 
 ### Data Flow
 
-1. **Ingestion** - Import trades from IBKR Flex Query (XML), Tradovate API (JSON), or CSV/XLSX files via pluggable `ImportSource` implementations
+1. **Ingestion** - Import trades from IBKR and Tradovate CSV/XLSX files via pluggable `ImportSource` implementations
 2. **Pipeline** - `IngestionPipeline` orchestrates: source.fetch -> validate -> dedup -> persist
 3. **Normalization** - Convert broker-specific formats into a unified `NormalizedTrade` Pydantic schema
 4. **Validation** - Verify required fields, value ranges, and timestamp consistency (all UTC)
@@ -121,7 +121,7 @@ GET /api/v1/groups/{id}/chart
 
 ### Supported
 
-- Multi-broker trade import: IBKR Flex Query (XML), Tradovate REST API (JSON), CSV/XLSX
+- Multi-broker trade import from IBKR and Tradovate CSV/XLSX exports
 - Automatic broker format detection for CSV files (IBKR Activity Statement, Tradovate export)
 - Pluggable import source architecture (add new brokers without modifying the pipeline)
 - Unified trade schema across all brokers
@@ -136,7 +136,6 @@ GET /api/v1/groups/{id}/chart
 - P&L calendar heatmap, equity curve, per-symbol breakdown
 - Key metrics dashboard (win rate, profit factor, average win/loss)
 - Sortable/filterable trade table
-- Scheduled automatic imports (APScheduler with idempotency)
 - API key authentication
 - Import audit trail with error reporting
 - Docker Compose single-command deployment (127.0.0.1 bound)
@@ -151,7 +150,6 @@ GET /api/v1/groups/{id}/chart
 
 ### Not Yet Supported
 
-- Real-time WebSocket streaming (IBKR Client Portal, Tradovate WebSocket)
 - Order placement or trade execution
 - Mobile application
 - Multi-user / multi-tenant
@@ -202,12 +200,8 @@ trading-records/
 │   │   ├── sources/         # Pluggable import sources
 │   │   │   ├── base.py      # ImportSource ABC + SourceRegistry
 │   │   │   ├── csv_source.py
-│   │   │   ├── flex_query_source.py
-│   │   │   └── tradovate_source.py
 │   │   ├── base.py          # BaseIngester (validate/dedup/persist)
 │   │   ├── csv_importer.py  # CSV format detection + column mapping
-│   │   ├── ibkr_flex.py     # IBKR Flex Query client
-│   │   ├── tradovate.py     # Tradovate REST client
 │   │   ├── normalizer.py    # Broker-specific normalization
 │   │   └── validator.py     # Field and range validation
 │   ├── models/              # SQLAlchemy ORM models
@@ -243,7 +237,7 @@ trading-records/
 │           └── hooks/       # React hooks wrapping endpoints with loading/error state
 ├── tests/
 │   ├── conftest.py          # SQLite test fixtures and session setup
-│   ├── fixtures/            # Sample broker data (XML, JSON, CSV)
+│   ├── fixtures/            # Sample broker data (CSV)
 │   ├── test_api/            # API integration tests
 │   ├── test_providers/      # Market data provider tests
 │   │   ├── test_validation.py         # Bar validation tests
@@ -282,7 +276,7 @@ trading-records/
 git clone <repo-url>
 cd trading-records
 cp .env.example .env
-# Edit .env with your credentials (see "Broker Configuration" below)
+# Edit .env with your API keys and local settings
 docker compose up -d
 docker compose exec app alembic upgrade head
 ```
@@ -331,45 +325,6 @@ When `APP_ENV` is unset, the loader auto-detects `test` if running under pytest,
 
 ## Broker Configuration
 
-### IBKR Flex Query
-
-To import trades from Interactive Brokers, you need a **Flex Query Token** and a **Query ID**.
-
-1. Log in to [IBKR Account Management](https://www.interactivebrokers.com/sso/Login)
-2. Navigate to **Reports / Tax Reports > Flex Queries**
-3. Create a new **Activity Flex Query**:
-   - Include **Trade Confirmations** with all fields
-   - Set the desired date range (up to 365 days)
-   - Save the query and note the **Query ID**
-4. Navigate to **Settings > Account Settings > Flex Web Service**
-   - Click **Create Token** to generate a Flex token
-   - Note the generated **token** (it will only be shown once)
-5. Set in `.env`:
-   ```
-   IBKR_FLEX_TOKEN=<your-flex-token>
-   IBKR_QUERY_ID=<your-query-id>
-   ```
-
-### Tradovate
-
-To import trades from Tradovate, you need API credentials from the Tradovate developer portal.
-
-1. Register at the [Tradovate API Portal](https://api.tradovate.com)
-2. Create a new **API Application**:
-   - Note the **Client ID** and **Client Secret**
-3. Generate a **Device ID** (any unique string, e.g. a UUID; generate once and reuse)
-4. Set in `.env`:
-   ```
-   TRADOVATE_USERNAME=<your-tradovate-username>
-   TRADOVATE_PASSWORD=<your-tradovate-password>
-   TRADOVATE_CLIENT_ID=<your-client-id>
-   TRADOVATE_CLIENT_SECRET=<your-client-secret>
-   TRADOVATE_DEVICE_ID=<your-device-id>
-   TRADOVATE_ENVIRONMENT=demo   # or "live" for production
-   ```
-
-> **Security Note:** Tradovate credentials grant trading access. Use a dedicated API-only account if available, or at minimum a unique password. Run only in a trusted local environment.
-
 ### CSV Import
 
 No configuration required. Upload CSV/XLSX files via the Import page or API. The system auto-detects:
@@ -402,18 +357,6 @@ curl -X POST http://localhost:8000/api/v1/import/csv \
   -F "file=@trades.csv"
 ```
 
-**IBKR Flex Query:**
-```bash
-curl -X POST http://localhost:8000/api/v1/import/flex/trigger \
-  -H "X-API-Key: <your-api-key>"
-```
-
-**Tradovate API:**
-```bash
-curl -X POST http://localhost:8000/api/v1/import/tradovate/trigger \
-  -H "X-API-Key: <your-api-key>"
-```
-
 ## API Endpoints
 
 All endpoints are served under the `/api/v1` prefix. Error responses follow a unified JSON format:
@@ -441,8 +384,6 @@ All endpoints are served under the `/api/v1` prefix. Error responses follow a un
 | PATCH   | `/api/v1/groups/{id}`                | Update strategy tag / notes               |
 | POST    | `/api/v1/groups/recompute`           | Recompute grouping for symbol             |
 | POST    | `/api/v1/import/csv`                 | Upload and import CSV                     |
-| POST    | `/api/v1/import/flex/trigger`        | Trigger IBKR Flex Query                   |
-| POST    | `/api/v1/import/tradovate/trigger`   | Trigger Tradovate API pull                |
 | GET     | `/api/v1/import/logs`                | Import attempt history                    |
 | GET     | `/api/v1/analytics/daily`            | Daily P&L summary                         |
 | GET     | `/api/v1/analytics/calendar`         | P&L calendar data                         |

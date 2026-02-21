@@ -77,9 +77,9 @@ class TestPipelineIngester:
     def test_source_different_values(self):
         """Different source names should work."""
         a = _PipelineIngester(source_name="csv")
-        b = _PipelineIngester(source_name="flex_query")
+        b = _PipelineIngester(source_name="manual_import")
         assert a.source == "csv"
-        assert b.source == "flex_query"
+        assert b.source == "manual_import"
 
 
 # ===========================================================================
@@ -123,21 +123,6 @@ class TestSourceRegistry:
         available = SourceRegistry.available()
         assert "csv" in available
 
-    def test_available_includes_flex_query(self):
-        """Available sources should include 'flex_query'."""
-        # The FlexQuerySource is registered at import time
-        from backend.ingestion.sources.flex_query_source import FlexQuerySource  # noqa: F401
-
-        available = SourceRegistry.available()
-        assert "flex_query" in available
-
-    def test_available_includes_tradovate(self):
-        """Available sources should include 'tradovate_api'."""
-        from backend.ingestion.sources.tradovate_source import TradovateSource  # noqa: F401
-
-        available = SourceRegistry.available()
-        assert "tradovate_api" in available
-
 
 # ===========================================================================
 # CSVSource
@@ -161,13 +146,15 @@ class TestCSVSource:
         for t in trades:
             assert t.broker == "ibkr"
 
-    def test_fetch_tradovate_perf_csv(self, tradovate_performance_csv):
+    def test_fetch_tradovate_perf_csv(
+        self, tradovate_performance_csv, tradovate_expected_trade_count
+    ):
         """CSVSource should parse Tradovate Performance CSV."""
         source = CSVSource()
         trades = source.fetch_normalized_trades(
             file_content=tradovate_performance_csv, filename="Performance.csv"
         )
-        assert len(trades) == 20
+        assert len(trades) == tradovate_expected_trade_count
         for t in trades:
             assert t.broker == "tradovate"
 
