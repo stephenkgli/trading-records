@@ -42,8 +42,8 @@ class TestDabentoProvider:
         # Create a mock DataFrame with proper datetime index
         index = pd.DatetimeIndex(
             [
-                pd.Timestamp("2025-01-15 10:00:00", tz="UTC"),
-                pd.Timestamp("2025-01-15 11:00:00", tz="UTC"),
+                pd.Timestamp("2025-01-15 14:30:00", tz="UTC"),  # 09:30 ET (RTH)
+                pd.Timestamp("2025-01-15 14:31:00", tz="UTC"),  # 09:31 ET (RTH)
             ]
         )
         df = pd.DataFrame(
@@ -67,7 +67,7 @@ class TestDabentoProvider:
         start = datetime(2025, 1, 15, tzinfo=timezone.utc)
         end = datetime(2025, 1, 16, tzinfo=timezone.utc)
 
-        bars = provider.fetch_ohlcv("MESZ5", "future", "1h", start, end)
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1m", start, end)
 
         assert len(bars) == 2
         assert bars[0].open == Decimal("100.0")
@@ -102,8 +102,8 @@ class TestDabentoProvider:
 
         index = pd.DatetimeIndex(
             [
-                pd.Timestamp("2025-01-15 10:00:00", tz="UTC"),
-                pd.Timestamp("2025-01-15 11:00:00", tz="UTC"),
+                pd.Timestamp("2025-01-15 14:30:00", tz="UTC"),  # 09:30 ET (RTH)
+                pd.Timestamp("2025-01-15 14:31:00", tz="UTC"),  # 09:31 ET (RTH)
             ]
         )
         df = pd.DataFrame(
@@ -127,9 +127,175 @@ class TestDabentoProvider:
         start = datetime(2025, 1, 15, tzinfo=timezone.utc)
         end = datetime(2025, 1, 16, tzinfo=timezone.utc)
 
-        bars = provider.fetch_ohlcv("MESZ5", "future", "1h", start, end)
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1m", start, end)
         assert len(bars) == 1
         assert bars[0].close == Decimal("105.0")
+
+    @patch("backend.services.providers.databento_provider.databento_counter")
+    def test_fetch_ohlcv_filters_to_rth_only(self, mock_counter, provider):
+        """ETH bars and weekend bars should be excluded for futures."""
+        mock_counter.check_and_increment = MagicMock()
+
+        index = pd.DatetimeIndex(
+            [
+                pd.Timestamp("2025-01-15 14:29:00", tz="UTC"),  # 09:29 ET (ETH)
+                pd.Timestamp("2025-01-15 14:30:00", tz="UTC"),  # 09:30 ET (RTH)
+                pd.Timestamp("2025-01-15 20:59:00", tz="UTC"),  # 15:59 ET (RTH)
+                pd.Timestamp("2025-01-15 21:00:00", tz="UTC"),  # 16:00 ET (ETH)
+                pd.Timestamp("2025-01-18 15:00:00", tz="UTC"),  # Saturday
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "open": [99.0, 100.0, 101.0, 102.0, 103.0],
+                "high": [100.0, 101.0, 102.0, 103.0, 104.0],
+                "low": [98.0, 99.0, 100.0, 101.0, 102.0],
+                "close": [99.5, 100.5, 101.5, 102.5, 103.5],
+                "volume": [100, 200, 300, 400, 500],
+            },
+            index=index,
+        )
+
+        mock_data = MagicMock()
+        mock_data.to_df.return_value = df
+
+        mock_client = MagicMock()
+        mock_client.timeseries.get_range.return_value = mock_data
+        provider._client = mock_client
+
+        start = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        end = datetime(2025, 1, 19, tzinfo=timezone.utc)
+
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1m", start, end)
+        assert len(bars) == 2
+        assert bars[0].time == int(pd.Timestamp("2025-01-15 14:30:00", tz="UTC").timestamp())
+        assert bars[1].time == int(pd.Timestamp("2025-01-15 20:59:00", tz="UTC").timestamp())
+
+    @patch("backend.services.providers.databento_provider.databento_counter")
+    def test_fetch_ohlcv_hourly_resample_aligned_to_0930_et(self, mock_counter, provider):
+        """1h resample should align bins to 09:30 ET session start."""
+        mock_counter.check_and_increment = MagicMock()
+
+        index = pd.DatetimeIndex(
+            [
+                pd.Timestamp("2025-01-15 14:30:00", tz="UTC"),  # 09:30 ET
+                pd.Timestamp("2025-01-15 14:45:00", tz="UTC"),  # 09:45 ET
+                pd.Timestamp("2025-01-15 15:35:00", tz="UTC"),  # 10:35 ET
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "open": [100.0, 101.0, 102.0],
+                "high": [105.0, 106.0, 107.0],
+                "low": [99.0, 100.0, 101.0],
+                "close": [104.0, 105.0, 106.0],
+                "volume": [1000, 1500, 2000],
+            },
+            index=index,
+        )
+
+        mock_data = MagicMock()
+        mock_data.to_df.return_value = df
+
+        mock_client = MagicMock()
+        mock_client.timeseries.get_range.return_value = mock_data
+        provider._client = mock_client
+
+        start = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        end = datetime(2025, 1, 16, tzinfo=timezone.utc)
+
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1h", start, end)
+        assert len(bars) == 2
+        assert bars[0].time == int(pd.Timestamp("2025-01-15 14:30:00", tz="UTC").timestamp())
+        assert bars[1].time == int(pd.Timestamp("2025-01-15 15:30:00", tz="UTC").timestamp())
+
+    @patch("backend.services.providers.databento_provider.databento_counter")
+    def test_fetch_ohlcv_rth_handles_est_and_edt_offsets(self, mock_counter, provider):
+        """RTH boundaries should shift with DST (EST vs EDT) automatically."""
+        mock_counter.check_and_increment = MagicMock()
+
+        index = pd.DatetimeIndex(
+            [
+                # Winter (EST): RTH is 14:30-21:00 UTC
+                pd.Timestamp("2025-01-15 14:29:00", tz="UTC"),  # 09:29 EST (ETH)
+                pd.Timestamp("2025-01-15 14:30:00", tz="UTC"),  # 09:30 EST (RTH)
+                pd.Timestamp("2025-01-15 20:59:00", tz="UTC"),  # 15:59 EST (RTH)
+                pd.Timestamp("2025-01-15 21:00:00", tz="UTC"),  # 16:00 EST (ETH)
+                # Summer (EDT): RTH is 13:30-20:00 UTC
+                pd.Timestamp("2025-06-16 13:29:00", tz="UTC"),  # 09:29 EDT (ETH)
+                pd.Timestamp("2025-06-16 13:30:00", tz="UTC"),  # 09:30 EDT (RTH)
+                pd.Timestamp("2025-06-16 19:59:00", tz="UTC"),  # 15:59 EDT (RTH)
+                pd.Timestamp("2025-06-16 20:00:00", tz="UTC"),  # 16:00 EDT (ETH)
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "open": [100.0] * len(index),
+                "high": [101.0] * len(index),
+                "low": [99.0] * len(index),
+                "close": [100.5] * len(index),
+                "volume": [1000] * len(index),
+            },
+            index=index,
+        )
+
+        mock_data = MagicMock()
+        mock_data.to_df.return_value = df
+
+        mock_client = MagicMock()
+        mock_client.timeseries.get_range.return_value = mock_data
+        provider._client = mock_client
+
+        start = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        end = datetime(2025, 6, 17, tzinfo=timezone.utc)
+
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1m", start, end)
+        kept = [bar.time for bar in bars]
+        assert kept == [
+            int(pd.Timestamp("2025-01-15 14:30:00", tz="UTC").timestamp()),
+            int(pd.Timestamp("2025-01-15 20:59:00", tz="UTC").timestamp()),
+            int(pd.Timestamp("2025-06-16 13:30:00", tz="UTC").timestamp()),
+            int(pd.Timestamp("2025-06-16 19:59:00", tz="UTC").timestamp()),
+        ]
+
+    @patch("backend.services.providers.databento_provider.databento_counter")
+    def test_fetch_ohlcv_rth_handles_dst_switch_week(self, mock_counter, provider):
+        """Bars around DST switch week should still keep 09:30 ET local open."""
+        mock_counter.check_and_increment = MagicMock()
+
+        index = pd.DatetimeIndex(
+            [
+                pd.Timestamp("2025-03-07 14:30:00", tz="UTC"),  # Fri before switch: 09:30 EST
+                pd.Timestamp("2025-03-10 13:30:00", tz="UTC"),  # Mon after switch: 09:30 EDT
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "open": [100.0, 101.0],
+                "high": [102.0, 103.0],
+                "low": [99.0, 100.0],
+                "close": [101.0, 102.0],
+                "volume": [1000, 1000],
+            },
+            index=index,
+        )
+
+        mock_data = MagicMock()
+        mock_data.to_df.return_value = df
+
+        mock_client = MagicMock()
+        mock_client.timeseries.get_range.return_value = mock_data
+        provider._client = mock_client
+
+        start = datetime(2025, 3, 7, tzinfo=timezone.utc)
+        end = datetime(2025, 3, 11, tzinfo=timezone.utc)
+
+        bars = provider.fetch_ohlcv("MESZ5", "future", "1m", start, end)
+        kept = [bar.time for bar in bars]
+        assert kept == [
+            int(pd.Timestamp("2025-03-07 14:30:00", tz="UTC").timestamp()),
+            int(pd.Timestamp("2025-03-10 13:30:00", tz="UTC").timestamp()),
+        ]
 
     def test_normalize_timestamp_naive(self):
         dt = datetime(2025, 1, 15, 10, 0, 0)

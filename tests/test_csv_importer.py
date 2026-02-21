@@ -151,16 +151,22 @@ class TestIBKRCSVParsing:
         assert len(trades) == ibkr_expected_trade_count
 
     def test_parse_ibkr_csv_datetime_formats(self):
-        """Various IBKR datetime formats should be parsed."""
+        """IBKR timestamps should be interpreted as ET and converted to UTC."""
         result1 = CSVImporter._parse_ibkr_csv_datetime("2025-01-15, 09:35:00")
         assert result1 is not None
         assert result1.year == 2025
+        assert result1.hour == 14  # 09:35 EST -> 14:35 UTC
 
         result2 = CSVImporter._parse_ibkr_csv_datetime("2025-01-15 09:35:00")
         assert result2 is not None
+        assert result2.hour == 14  # 09:35 EST -> 14:35 UTC
 
-        result3 = CSVImporter._parse_ibkr_csv_datetime("")
-        assert result3 is None
+        result3 = CSVImporter._parse_ibkr_csv_datetime("2024-06-06, 09:32:06")
+        assert result3 is not None
+        assert result3.hour == 13  # 09:32 EDT -> 13:32 UTC
+
+        result4 = CSVImporter._parse_ibkr_csv_datetime("")
+        assert result4 is None
 
     def test_parse_ibkr_csv_no_trades(self, ibkr_activity_no_trades_csv):
         """IBKR CSV with no data rows should return empty list."""

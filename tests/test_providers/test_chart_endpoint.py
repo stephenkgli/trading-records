@@ -61,6 +61,53 @@ def _seed_group_with_legs(db_session):
     return group_id
 
 
+def _seed_future_group_with_legs(db_session):
+    """Create a futures trade group with one leg for chart testing."""
+    trade_id = uuid.uuid4()
+    group_id = uuid.uuid4()
+
+    trade = Trade(
+        id=trade_id,
+        broker="tradovate",
+        broker_exec_id="FCHART0001",
+        account_id="",
+        symbol="MESZ5",
+        asset_class="future",
+        side="buy",
+        quantity=Decimal("1"),
+        price=Decimal("6000.00"),
+        commission=Decimal("0.00"),
+        executed_at=datetime(2025, 1, 15, 15, 0, 0, tzinfo=timezone.utc),
+        currency="USD",
+        raw_data={},
+    )
+    db_session.add(trade)
+
+    group = TradeGroup(
+        id=group_id,
+        account_id="",
+        symbol="MESZ5",
+        asset_class="future",
+        direction="long",
+        status="open",
+        realized_pnl=None,
+        opened_at=datetime(2025, 1, 15, 15, 0, 0, tzinfo=timezone.utc),
+        closed_at=None,
+    )
+    db_session.add(group)
+
+    leg = TradeGroupLeg(
+        id=uuid.uuid4(),
+        trade_group_id=group_id,
+        trade_id=trade_id,
+        role="entry",
+    )
+    db_session.add(leg)
+    db_session.flush()
+
+    return group_id
+
+
 def _make_bars(count: int = 5) -> list[OHLCVBar]:
     """Create a list of mock OHLCVBar objects."""
     bars = []
@@ -225,3 +272,25 @@ class TestChartEndpoint:
             headers=auth_headers,
         )
         assert response.status_code == 404
+
+    def test_future_chart_uses_rth_cache_namespace(
+        self, client, auth_headers, db_session
+    ):
+        """Futures chart cache key should be isolated to RTH-only namespace."""
+        group_id = _seed_future_group_with_legs(db_session)
+        mock_bars = _make_bars(1)
+
+        with patch("backend.api.groups.OHLCVCacheService") as MockCacheService:
+            mock_cache_instance = MagicMock()
+            mock_cache_instance.get.return_value = mock_bars
+            MockCacheService.return_value = mock_cache_instance
+
+            response = client.get(
+                f"/api/v1/groups/{group_id}/chart?interval=5m",
+                headers=auth_headers,
+            )
+
+            assert response.status_code == 200
+            mock_cache_instance.get.assert_called_once()
+            cache_symbol = mock_cache_instance.get.call_args.args[0]
+            assert cache_symbol == "MES__RTH"

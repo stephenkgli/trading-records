@@ -13,7 +13,9 @@ Contract roll handling:
 """
 
 from datetime import datetime, timezone
+from datetime import time as dt_time
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import databento as db
 import structlog
@@ -40,18 +42,25 @@ class DabentoProvider:
     """
 
     DATASET = "GLBX.MDP3"
+    RTH_TIMEZONE = ZoneInfo("America/New_York")
+    RTH_START = dt_time(9, 30)
+    RTH_END = dt_time(16, 0)
 
     INTERVAL_SCHEMA_MAP: dict[str, tuple[str, bool]] = {
         "1m": ("ohlcv-1m", False),
         "5m": ("ohlcv-1m", True),  # Resample 1m -> 5m
         "15m": ("ohlcv-1m", True),  # Resample 1m -> 15m
-        "1h": ("ohlcv-1h", False),
-        "1d": ("ohlcv-1d", False),
+        # Use 1m source for higher intervals so futures can be constrained
+        # strictly to RTH before aggregation.
+        "1h": ("ohlcv-1m", True),
+        "1d": ("ohlcv-1m", True),
     }
 
     RESAMPLE_RULES: dict[str, str] = {
         "5m": "5min",
         "15m": "15min",
+        "1h": "1h",
+        "1d": "1d",
     }
 
     RESAMPLE_WARN_THRESHOLD = 10_000
@@ -85,6 +94,62 @@ class DabentoProvider:
 
         root = normalize_futures_symbol(symbol, asset_class)
         return f"{root}.c.0"
+
+    @classmethod
+    def _filter_rth(cls, df):
+        """Filter futures bars to regular trading hours (ET 09:30-16:00)."""
+        if df.empty:
+            return df
+
+        index = df.index
+        if index.tz is None:
+            df = df.tz_localize(timezone.utc)
+        else:
+            df = df.tz_convert(timezone.utc)
+
+        local = df.index.tz_convert(cls.RTH_TIMEZONE)
+        mask = (
+            (local.dayofweek < 5)
+            & (local.time >= cls.RTH_START)
+            & (local.time < cls.RTH_END)
+        )
+        return df[mask]
+
+    @classmethod
+    def _resample(cls, df, interval: str):
+        """Resample filtered 1m bars to requested interval."""
+        rule = cls.RESAMPLE_RULES.get(interval)
+        if not rule:
+            return df
+
+        local_df = df.tz_convert(cls.RTH_TIMEZONE)
+        if interval == "1h":
+            # Align hourly bins to RTH session open (09:30 ET).
+            local_df = local_df.resample(
+                "1h",
+                origin="start_day",
+                offset="30min",
+            ).agg(
+                {
+                    "open": "first",
+                    "high": "max",
+                    "low": "min",
+                    "close": "last",
+                    "volume": "sum",
+                }
+            ).dropna()
+        else:
+            local_df = local_df.resample(rule).agg(
+                {
+                    "open": "first",
+                    "high": "max",
+                    "low": "min",
+                    "close": "last",
+                    "volume": "sum",
+                }
+            ).dropna()
+
+        return local_df.tz_convert(timezone.utc)
 
     def fetch_ohlcv(
         self,
@@ -128,20 +193,15 @@ class DabentoProvider:
         if df.empty:
             return []
 
+        # Futures should only expose RTH bars in charts.
+        df = self._filter_rth(df)
+        if df.empty:
+            return []
+
         if needs_resample:
-            rule = self.RESAMPLE_RULES.get(interval)
-            if rule:
-                if len(df) > self.RESAMPLE_WARN_THRESHOLD:
-                    logger.warning("large_resample_dataset", symbol=db_symbol, rows=len(df))
-                df = df.resample(rule).agg(
-                    {
-                        "open": "first",
-                        "high": "max",
-                        "low": "min",
-                        "close": "last",
-                        "volume": "sum",
-                    }
-                ).dropna()
+            if len(df) > self.RESAMPLE_WARN_THRESHOLD:
+                logger.warning("large_resample_dataset", symbol=db_symbol, rows=len(df))
+            df = self._resample(df, interval)
 
         bars = self._to_bars(df)
         # 跨 Bar 统计学异常检测：移除偏离中位数过大的毛刺

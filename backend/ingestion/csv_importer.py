@@ -14,12 +14,15 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import BinaryIO
+from functools import lru_cache
+from zoneinfo import ZoneInfo
 
 import structlog
 
+from backend.config import settings
 from backend.ingestion.base import BaseIngester
 from backend.ingestion.normalizer import (
     ensure_utc,
@@ -47,6 +50,8 @@ class CSVImporter(BaseIngester):
     """Imports trades from CSV files with automatic format detection."""
 
     source = "csv"
+    DEFAULT_IBKR_TIMEZONE = "America/New_York"
+    DEFAULT_TRADOVATE_TIMEZONE = "Asia/Shanghai"
 
     def import_csv(
         self,
@@ -327,11 +332,114 @@ class CSVImporter(BaseIngester):
         )
 
     @staticmethod
-    def _parse_ibkr_csv_datetime(dt_str: str) -> datetime | None:
-        """Parse IBKR CSV datetime formats."""
+    @lru_cache(maxsize=16)
+    def _zoneinfo(tz_name: str) -> ZoneInfo:
+        """Load and cache ZoneInfo instances."""
+        return ZoneInfo(tz_name)
+
+    @classmethod
+    def _resolve_timezone(
+        cls,
+        configured_tz: str | None,
+        *,
+        fallback_tz: str,
+        setting_name: str,
+    ) -> ZoneInfo:
+        """Resolve a configured timezone string with fallback and warning."""
+        candidate = (configured_tz or "").strip() or fallback_tz
+        try:
+            return cls._zoneinfo(candidate)
+        except Exception:
+            logger.warning(
+                "csv_timezone_fallback",
+                setting_name=setting_name,
+                configured_value=candidate,
+                fallback=fallback_tz,
+            )
+            return cls._zoneinfo(fallback_tz)
+
+    @staticmethod
+    def _parse_explicit_offset_datetime(dt_str: str) -> datetime | None:
+        """Parse ISO-like datetime strings that already include UTC offset."""
+        value = dt_str.strip()
+        if not value:
+            return None
+
+        # Normalize trailing Z for datetime.fromisoformat support.
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+
+        if parsed.tzinfo is None:
+            return None
+        return ensure_utc(parsed)
+
+    @classmethod
+    def _parse_datetime_with_default_timezone(
+        cls,
+        dt_str: str,
+        *,
+        formats: list[str],
+        default_tz: ZoneInfo,
+    ) -> datetime | None:
+        """Parse datetime and convert to UTC.
+
+        Rule:
+        - If timestamp carries an explicit offset/Z, honor it directly.
+        - Otherwise, treat it as source-local time (*default_tz*) then convert to UTC.
+        """
         if not dt_str:
             return None
 
+        value = dt_str.strip()
+        if not value:
+            return None
+
+        # 1) Explicit-offset strings (e.g. 2025-01-01T10:00:00Z / +08:00)
+        explicit = cls._parse_explicit_offset_datetime(value)
+        if explicit is not None:
+            return explicit
+
+        # 2) Common timezone suffixes that are not reliably handled by strptime.
+        no_suffix = re.sub(
+            r"\s+(UTC|GMT|EST|EDT|ET)$",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        candidates = [value]
+        if no_suffix != value:
+            candidates.append(no_suffix)
+
+        for candidate in candidates:
+            for fmt in formats:
+                try:
+                    parsed = datetime.strptime(candidate, fmt)
+                except ValueError:
+                    continue
+                if parsed.tzinfo is not None:
+                    return ensure_utc(parsed)
+                return parsed.replace(tzinfo=default_tz).astimezone(timezone.utc)
+
+        return None
+
+    @classmethod
+    def _parse_ibkr_csv_datetime(
+        cls,
+        dt_str: str,
+        source_timezone: str | None = None,
+    ) -> datetime | None:
+        """Parse IBKR CSV datetime values and normalize to UTC.
+
+        IBKR Activity CSV timestamps are ET by default.
+        """
+        source_tz = cls._resolve_timezone(
+            source_timezone or getattr(settings, "ibkr_csv_timezone", None),
+            fallback_tz=cls.DEFAULT_IBKR_TIMEZONE,
+            setting_name="ibkr_csv_timezone",
+        )
         formats = [
             "%Y-%m-%d, %H:%M:%S",
             "%Y-%m-%d %H:%M:%S",
@@ -340,13 +448,11 @@ class CSVImporter(BaseIngester):
             "%m/%d/%Y %H:%M:%S",
             "%m/%d/%Y",
         ]
-        for fmt in formats:
-            try:
-                dt = datetime.strptime(dt_str.strip(), fmt)
-                return ensure_utc(dt)
-            except ValueError:
-                continue
-        return None
+        return cls._parse_datetime_with_default_timezone(
+            dt_str,
+            formats=formats,
+            default_tz=source_tz,
+        )
 
     def _parse_tradovate_csv(
         self, text: str, filename: str
@@ -586,13 +692,24 @@ class CSVImporter(BaseIngester):
         except Exception:
             return None
 
-    @staticmethod
-    def _parse_tradovate_csv_datetime(dt_str: str) -> datetime | None:
-        """Parse Tradovate CSV datetime formats."""
-        if not dt_str:
-            return None
+    @classmethod
+    def _parse_tradovate_csv_datetime(
+        cls,
+        dt_str: str,
+        source_timezone: str | None = None,
+    ) -> datetime | None:
+        """Parse Tradovate CSV datetime values and normalize to UTC.
 
+        Tradovate export timestamps are local to the exporting environment.
+        """
+        source_tz = cls._resolve_timezone(
+            source_timezone or getattr(settings, "tradovate_csv_timezone", None),
+            fallback_tz=cls.DEFAULT_TRADOVATE_TIMEZONE,
+            setting_name="tradovate_csv_timezone",
+        )
         formats = [
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+            "%Y-%m-%dT%H:%M:%S%z",
             "%Y-%m-%dT%H:%M:%S.%fZ",
             "%Y-%m-%dT%H:%M:%SZ",
             "%Y-%m-%dT%H:%M:%S",
@@ -600,10 +717,8 @@ class CSVImporter(BaseIngester):
             "%m/%d/%Y %H:%M:%S",
             "%m/%d/%Y %I:%M:%S %p",
         ]
-        for fmt in formats:
-            try:
-                dt = datetime.strptime(dt_str.strip(), fmt)
-                return ensure_utc(dt)
-            except ValueError:
-                continue
-        return None
+        return cls._parse_datetime_with_default_timezone(
+            dt_str,
+            formats=formats,
+            default_tz=source_tz,
+        )

@@ -33,6 +33,13 @@ class BaseAppSettings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # CSV import timezone assumptions
+    # IBKR Activity CSV timestamps are exchange-local ET by default.
+    ibkr_csv_timezone: str = "America/New_York"
+    # Tradovate CSV timestamps are local to the exporting workstation.
+    # Defaulting to UTC+8 for current operating environment.
+    tradovate_csv_timezone: str = "Asia/Shanghai"
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""

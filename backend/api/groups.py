@@ -166,11 +166,16 @@ def get_group_chart(
 
     # Fetch OHLCV data — provider handles symbol mapping internally
     display_symbol = normalize_futures_symbol(group.symbol, group.asset_class)
+    cache_symbol = (
+        f"{display_symbol}__RTH"
+        if group.asset_class == "future"
+        else display_symbol
+    )
 
     cache = OHLCVCacheService(db)
 
     # 1. Try cache
-    bars = cache.get(display_symbol, resolved_interval, start, end)
+    bars = cache.get(cache_symbol, resolved_interval, start, end)
 
     if bars is None:
         # 2. Fetch from provider (fail-fast on error)
@@ -201,7 +206,7 @@ def get_group_chart(
         # 3. Cache completed bars
         if bars:
             provider_tag = provider.__class__.__name__.lower().replace("provider", "")
-            cache.put(display_symbol, resolved_interval, group.asset_class, provider_tag, bars)
+            cache.put(cache_symbol, resolved_interval, group.asset_class, provider_tag, bars)
 
     if not bars:
         # Return an empty chart instead of 404 so the frontend can still

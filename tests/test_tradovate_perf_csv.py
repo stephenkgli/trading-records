@@ -127,7 +127,7 @@ class TestTradovatePerfParsing:
         assert first_sell.price == Decimal("6130.25")
 
     def test_datetime_parsing(self, importer, tradovate_performance_csv):
-        """Timestamps should be correctly parsed from MM/DD/YYYY HH:MM:SS format."""
+        """Naive Tradovate timestamps should be treated as local and converted to UTC."""
         trades = importer._parse_tradovate_performance_csv(
             tradovate_performance_csv, "Performance.csv"
         )
@@ -136,7 +136,7 @@ class TestTradovatePerfParsing:
         assert first_buy.executed_at.year == 2025
         assert first_buy.executed_at.month == 1
         assert first_buy.executed_at.day == 22
-        assert first_buy.executed_at.hour == 23
+        assert first_buy.executed_at.hour == 15  # 23:02:03 local(UTC+8) -> 15:02:03 UTC
         assert first_buy.executed_at.minute == 2
         assert first_buy.executed_at.second == 3
 
@@ -264,13 +264,13 @@ class TestTradovatePerfDatetime:
     """Test datetime parsing for Tradovate Performance timestamps."""
 
     def test_parse_standard_format(self):
-        """Standard Tradovate Performance datetime format should parse."""
+        """Standard format should parse as local time and normalize to UTC."""
         dt = CSVImporter._parse_tradovate_csv_datetime("01/22/2025 23:02:03")
         assert dt is not None
         assert dt.year == 2025
         assert dt.month == 1
         assert dt.day == 22
-        assert dt.hour == 23
+        assert dt.hour == 15  # 23:02:03 local(UTC+8) -> 15:02:03 UTC
         assert dt.minute == 2
         assert dt.second == 3
 
@@ -285,6 +285,13 @@ class TestTradovatePerfDatetime:
         assert dt is not None
         assert dt.tzinfo is not None
         assert dt.tzinfo == timezone.utc
+
+    def test_parse_iso_z_keeps_utc(self):
+        """Timezone-explicit strings should honor their own offset."""
+        dt = CSVImporter._parse_tradovate_csv_datetime("2025-06-16T21:57:36Z")
+        assert dt is not None
+        assert dt.tzinfo == timezone.utc
+        assert dt.hour == 21
 
 
 # ===========================================================================
