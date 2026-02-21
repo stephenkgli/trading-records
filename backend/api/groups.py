@@ -106,9 +106,11 @@ def list_groups(
     account_id: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    sort: str = Query("opened_at"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
-    """List trade groups with optional filters."""
+    """List trade groups with filtering, global sorting, and pagination."""
     query = select(TradeGroup)
 
     if status:
@@ -121,7 +123,19 @@ def list_groups(
     count_query = select(func.count()).select_from(query.subquery())
     total = db.execute(count_query).scalar_one()
 
-    query = query.order_by(TradeGroup.opened_at.desc())
+    sortable_columns = {
+        "symbol": TradeGroup.symbol,
+        "direction": TradeGroup.direction,
+        "status": TradeGroup.status,
+        "realized_pnl": TradeGroup.realized_pnl,
+        "opened_at": TradeGroup.opened_at,
+        "closed_at": TradeGroup.closed_at,
+    }
+    sort_column = sortable_columns.get(sort, TradeGroup.opened_at)
+    if order == "asc":
+        query = query.order_by(sort_column.asc().nulls_last(), TradeGroup.id.asc())
+    else:
+        query = query.order_by(sort_column.desc().nulls_last(), TradeGroup.id.desc())
     query = query.offset((page - 1) * per_page).limit(per_page)
     groups = db.execute(query).scalars().all()
 

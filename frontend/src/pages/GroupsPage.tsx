@@ -5,24 +5,36 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable,
   getCoreRowModel,
-  getSortedRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
 import TradeChartModal from "../components/TradeChartModal";
-import { normalizeDateValue, formatDateTime } from "../utils/date";
+import { formatDateTime } from "../utils/date";
 
 export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "opened_at", desc: true },
+  ]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const sortParam = sorting[0]?.id;
+  const orderParam: "asc" | "desc" | undefined = sorting[0]
+    ? (sorting[0].desc ? "desc" : "asc")
+    : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["groups", page, statusFilter],
-    queryFn: () => fetchGroups(page, statusFilter || undefined),
+    queryKey: ["groups", page, statusFilter, sortParam, orderParam],
+    queryFn: () =>
+      fetchGroups(
+        page,
+        statusFilter || undefined,
+        undefined,
+        sortParam,
+        orderParam
+      ),
   });
 
   const recomputeMutation = useMutation({
@@ -40,12 +52,7 @@ export default function GroupsPage() {
       {
         id: "rowNumber",
         header: "#",
-        cell: ({ row, table: tbl }) => {
-          // 使用排序后的行模型中的显示索引，确保排序后序号仍然连续
-          const sortedRows = tbl.getSortedRowModel().rows;
-          const displayIndex = sortedRows.findIndex((r) => r.id === row.id);
-          return pageOffset + (displayIndex >= 0 ? displayIndex : row.index) + 1;
-        },
+        cell: ({ row }) => pageOffset + row.index + 1,
         enableSorting: false,
       },
       {
@@ -88,11 +95,6 @@ export default function GroupsPage() {
       {
         accessorKey: "realized_pnl",
         header: "P&L",
-        sortingFn: (rowA, rowB) => {
-          const a = Number(rowA.original.realized_pnl) || 0;
-          const b = Number(rowB.original.realized_pnl) || 0;
-          return a - b;
-        },
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
           if (val === null) return <span className="text-gray-400">-</span>;
@@ -107,21 +109,11 @@ export default function GroupsPage() {
       {
         accessorKey: "opened_at",
         header: "Opened",
-        sortingFn: (rowA, rowB) => {
-          const a = normalizeDateValue(rowA.original.opened_at)?.getTime() ?? 0;
-          const b = normalizeDateValue(rowB.original.opened_at)?.getTime() ?? 0;
-          return a - b;
-        },
         cell: ({ getValue }) => formatDateTime(getValue() as string),
       },
       {
         accessorKey: "closed_at",
         header: "Closed",
-        sortingFn: (rowA, rowB) => {
-          const a = normalizeDateValue(rowA.original.closed_at)?.getTime() ?? 0;
-          const b = normalizeDateValue(rowB.original.closed_at)?.getTime() ?? 0;
-          return a - b;
-        },
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
           return formatDateTime(val);
@@ -136,9 +128,15 @@ export default function GroupsPage() {
     data: data?.groups ?? [],
     columns,
     state: { sorting },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        setPage(1);
+        return next;
+      });
+    },
+    manualSorting: true,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   });
 
   return (

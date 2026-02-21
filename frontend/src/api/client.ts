@@ -115,11 +115,15 @@ export interface TradeGroupListResponse {
 export async function fetchGroups(
   page = 1,
   status?: string,
-  symbol?: string
+  symbol?: string,
+  sort?: string,
+  order?: "asc" | "desc"
 ): Promise<TradeGroupListResponse> {
   const params = new URLSearchParams({ page: String(page) });
   if (status) params.set("status", status);
   if (symbol) params.set("symbol", symbol);
+  if (sort) params.set("sort", sort);
+  if (order) params.set("order", order);
   const response = await fetch(`${getApiBase()}/groups?${params}`, {
     headers: getHeaders(),
   });

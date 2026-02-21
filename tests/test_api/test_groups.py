@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from decimal import Decimal
 
 
 class TestGroupsAPI:
@@ -44,3 +46,59 @@ class TestGroupsAPI:
     def test_groups_requires_auth(self, client):
         assert client.get("/api/v1/groups").status_code == 401
         assert client.post("/api/v1/groups/recompute").status_code == 401
+
+    def test_groups_sort_and_pagination_are_global(
+        self, client, auth_headers, db_session, make_trade_group
+    ):
+        make_trade_group(
+            symbol="AAPL",
+            realized_pnl=Decimal("30"),
+            opened_at=datetime(2025, 1, 3, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        make_trade_group(
+            symbol="MSFT",
+            realized_pnl=Decimal("10"),
+            opened_at=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        make_trade_group(
+            symbol="GOOG",
+            realized_pnl=Decimal("20"),
+            opened_at=datetime(2025, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        db_session.commit()
+
+        page1 = client.get(
+            "/api/v1/groups?sort=opened_at&order=asc&page=1&per_page=1",
+            headers=auth_headers,
+        )
+        page2 = client.get(
+            "/api/v1/groups?sort=opened_at&order=asc&page=2&per_page=1",
+            headers=auth_headers,
+        )
+        page3 = client.get(
+            "/api/v1/groups?sort=opened_at&order=asc&page=3&per_page=1",
+            headers=auth_headers,
+        )
+
+        assert page1.status_code == 200
+        assert page2.status_code == 200
+        assert page3.status_code == 200
+        assert page1.json()["groups"][0]["symbol"] == "MSFT"
+        assert page2.json()["groups"][0]["symbol"] == "GOOG"
+        assert page3.json()["groups"][0]["symbol"] == "AAPL"
+
+    def test_groups_sort_by_realized_pnl_desc(
+        self, client, auth_headers, db_session, make_trade_group
+    ):
+        make_trade_group(symbol="AAPL", realized_pnl=Decimal("30"))
+        make_trade_group(symbol="MSFT", realized_pnl=Decimal("-10"))
+        make_trade_group(symbol="GOOG", realized_pnl=Decimal("20"))
+        db_session.commit()
+
+        resp = client.get(
+            "/api/v1/groups?sort=realized_pnl&order=desc&page=1&per_page=3",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        symbols = [g["symbol"] for g in resp.json()["groups"]]
+        assert symbols == ["AAPL", "GOOG", "MSFT"]
