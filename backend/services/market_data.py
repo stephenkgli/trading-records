@@ -1,20 +1,18 @@
 """Market data provider for OHLCV candle data.
 
 Implements a protocol-based abstraction over market data sources.
-The default provider uses yfinance; the protocol allows swapping
-to Twelve Data, IBKR, or other sources by implementing
-``MarketDataProvider``.
+Providers (Databento for futures, Tiingo for stocks) implement
+the ``MarketDataProvider`` protocol. A PostgreSQL cache layer
+(``OHLCVCacheService``) stores completed bars permanently.
 """
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Protocol
 
 import structlog
-from cachetools import TTLCache
 from pydantic import BaseModel
 
 from backend.utils.symbol import normalize_futures_symbol
@@ -106,113 +104,10 @@ class MarketDataProvider(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# In-memory TTL cache for OHLCV data
-# ---------------------------------------------------------------------------
-
-_ohlcv_cache: TTLCache[str, list[OHLCVBar]] = TTLCache(maxsize=256, ttl=600)
-
-
-def _cache_key(symbol: str, interval: str, start: datetime, end: datetime) -> str:
-    """Build a deterministic cache key for an OHLCV request."""
-    raw = f"{symbol}|{interval}|{start.isoformat()}|{end.isoformat()}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# YFinance provider implementation
-# ---------------------------------------------------------------------------
-
-
-class YFinanceProvider:
-    """Market data provider backed by yfinance.
-
-    Handles provider-specific symbol mapping internally:
-    - futures ``MESZ5`` -> ``MES=F``
-    - other asset classes: symbol as-is.
-    """
-
-    @staticmethod
-    def _resolve_symbol(symbol: str, asset_class: str) -> str:
-        """Map a raw trading symbol to a yfinance-compatible ticker."""
-        if asset_class == "future":
-            base = normalize_futures_symbol(symbol, asset_class)
-            return f"{base}=F"
-        return symbol
-
-    def fetch_ohlcv(
-        self,
-        symbol: str,
-        asset_class: str,
-        interval: str,
-        start: datetime,
-        end: datetime,
-    ) -> list[OHLCVBar]:
-        """Fetch OHLCV bars from Yahoo Finance.
-
-        Args:
-            symbol: Raw ticker symbol from the DB (e.g. ``"MESZ5"``, ``"AAPL"``).
-            asset_class: Asset class (``"future"``, ``"stock"``, etc.).
-            interval: Bar interval (``"5m"``, ``"1d"``, etc.).
-            start: Start of the time range (inclusive, UTC).
-            end: End of the time range (inclusive, UTC).
-
-        Returns:
-            Ordered list of OHLCVBar from oldest to newest.
-        """
-        yf_symbol = self._resolve_symbol(symbol, asset_class)
-
-        key = _cache_key(yf_symbol, interval, start, end)
-        cached = _ohlcv_cache.get(key)
-        if cached is not None:
-            logger.debug("ohlcv_cache_hit", symbol=yf_symbol, interval=interval)
-            return cached
-
-        import yfinance as yf  # noqa: PLC0415 — lazy import
-
-        logger.info(
-            "fetching_ohlcv",
-            symbol=yf_symbol,
-            interval=interval,
-            start=start.isoformat(),
-            end=end.isoformat(),
-        )
-
-        ticker = yf.Ticker(yf_symbol)
-        df = ticker.history(interval=interval, start=start, end=end)
-
-        if df.empty:
-            logger.warning("ohlcv_empty_response", symbol=yf_symbol, interval=interval)
-            return []
-
-        bars: list[OHLCVBar] = []
-        for row in df.itertuples():
-            ts = int(row.Index.timestamp())
-            bars.append(
-                OHLCVBar(
-                    time=ts,
-                    open=Decimal(str(row.Open)),
-                    high=Decimal(str(row.High)),
-                    low=Decimal(str(row.Low)),
-                    close=Decimal(str(row.Close)),
-                    volume=int(row.Volume),
-                )
-            )
-
-        _ohlcv_cache[key] = bars
-        logger.info(
-            "ohlcv_fetched",
-            symbol=yf_symbol,
-            interval=interval,
-            bar_count=len(bars),
-        )
-        return bars
-
-
-# ---------------------------------------------------------------------------
 # Interval -> approximate bar duration mapping
 # ---------------------------------------------------------------------------
 
-_INTERVAL_DURATIONS: dict[str, timedelta] = {
+INTERVAL_DURATIONS: dict[str, timedelta] = {
     "1m": timedelta(minutes=1),
     "5m": timedelta(minutes=5),
     "15m": timedelta(minutes=15),
@@ -241,15 +136,18 @@ def compute_padded_range(
     Returns:
         A ``(start, end)`` tuple of datetimes.
     """
-    bar_duration = _INTERVAL_DURATIONS.get(interval, timedelta(hours=1))
+    bar_duration = INTERVAL_DURATIONS.get(interval, timedelta(hours=1))
     pad = bar_duration * padding
 
     start = opened_at - pad
     end = (closed_at or datetime.now(UTC)) + pad
 
     # Clamp end to now so we never request future data from providers.
-    # Use tz-aware or naive now to match the input timestamps.
-    now = datetime.now(UTC) if end.tzinfo else datetime.utcnow()  # noqa: DTZ003
+    # SQLite returns naive datetimes, so handle both cases.
+    if end.tzinfo is None:
+        now = datetime.now(UTC).replace(tzinfo=None)
+    else:
+        now = datetime.now(UTC)
     if end > now:
         end = now
 
@@ -261,23 +159,84 @@ def compute_padded_range(
 # ---------------------------------------------------------------------------
 
 
+def _snap_to_bar(marker_ts: int, bar_times: list[int]) -> int:
+    """将 marker 时间戳 snap 到它所属的 K 线 bar 时间。
+
+    核心逻辑：找到 bar_time <= marker_ts 的最大 bar_time，即交易发生时所属
+    的那根 K 线。例如交易在 22:04:17 执行，5 分钟 K 线间距下应 snap 到
+    22:00:00 的 bar（而不是距离更近的 22:05:00）。
+
+    特殊处理：当 marker 落在 K 线缺口中（如 CME 维护窗口 21:00-22:00 UTC
+    造成的 65 分钟缺口）时，marker 与左侧 bar 的距离会远超正常 bar 间距。
+    此时改为 snap 到缺口后的第一根 bar，因为交易实际上是在市场恢复后成交的。
+
+    bar_times 为空时原样返回。
+    """
+    if not bar_times:
+        return marker_ts
+
+    # bar_times 已经按升序排列（来自 OHLCV 数据）
+    # 二分查找最后一个 <= marker_ts 的 bar_time
+    lo, hi = 0, len(bar_times) - 1
+    left_idx = -1  # 最后一个 <= marker_ts 的索引
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if bar_times[mid] <= marker_ts:
+            left_idx = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    # 边界情况：marker 比所有 bar 都早
+    if left_idx < 0:
+        return bar_times[0]
+
+    # right_idx: 第一个 > marker_ts 的索引
+    right_idx = left_idx + 1
+
+    # 正常情况：snap 到所属的 bar（left_idx 对应的 bar）
+    # 但如果存在 K 线缺口（marker 与 left bar 之间距离远超正常 bar 间距），
+    # 则 snap 到缺口后的第一根 bar（right_idx）。
+    if right_idx < len(bar_times):
+        # 推断正常的 bar 间距（取相邻 bar 的最小间距）
+        normal_gap = bar_times[right_idx] - bar_times[left_idx]
+        if left_idx > 0:
+            prev_gap = bar_times[left_idx] - bar_times[left_idx - 1]
+            normal_gap = min(normal_gap, prev_gap)
+
+        left_dist = marker_ts - bar_times[left_idx]
+        # 如果与左侧 bar 的距离超过 2 倍正常间距，说明处于缺口中，
+        # snap 到右侧 bar（缺口后的第一根）
+        if left_dist > normal_gap * 2:
+            return bar_times[right_idx]
+
+    return bar_times[left_idx]
+
+
 def build_markers(
     legs: list,  # list of TradeGroupLeg ORM objects (with .trade loaded)
     direction: str,
+    bar_times: list[int] | None = None,
 ) -> list[dict]:
     """Convert trade group legs into lightweight-charts marker dicts.
 
     Each marker includes time, position, color, shape, text, role, and
     trade_id fields ready for the frontend ``setMarkers()`` API.
 
+    When ``bar_times`` is provided, each marker's time will be snapped
+    to the candle bar it belongs to (the largest bar_time <= marker_time),
+    ensuring markers align correctly on the chart.
+
     Args:
         legs: TradeGroupLeg objects with eagerly loaded ``.trade`` relationships.
         direction: ``"long"`` or ``"short"``.
+        bar_times: Sorted list of candle bar Unix timestamps (seconds).
 
     Returns:
         List of marker dicts sorted by trade execution time.
     """
     colors = ROLE_COLORS_LONG if direction == "long" else ROLE_COLORS_SHORT
+    sorted_bar_times = bar_times or []
     markers: list[dict] = []
 
     for leg in sorted(legs, key=lambda lg: lg.trade.executed_at):
@@ -293,11 +252,14 @@ def build_markers(
 
         color = colors.get(leg.role, "#9ca3af")
 
+        raw_ts = int(trade.executed_at.timestamp())
+        snapped_ts = _snap_to_bar(raw_ts, sorted_bar_times)
+
         qty = _format_decimal(trade.quantity)
         px = _format_decimal(trade.price)
         markers.append(
             {
-                "time": int(trade.executed_at.timestamp()),
+                "time": snapped_ts,
                 "position": position,
                 "color": color,
                 "shape": shape,

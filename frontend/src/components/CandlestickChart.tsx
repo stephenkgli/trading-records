@@ -18,9 +18,21 @@ interface Props {
   height?: number;
 }
 
+/**
+ * 获取当前浏览器时区偏移（秒），用于将 UTC 时间戳转为本地时间显示。
+ * lightweight-charts 内部按 UTC 解读时间戳，因此加上偏移后图表 x 轴显示的就是本地时间。
+ *
+ * getTimezoneOffset() 返回 UTC 与本地时间的差值（分钟），正值表示本地时间落后于 UTC。
+ * 例如 UTC+8 时区返回 -480，我们需要 +8 小时 = +28800 秒，所以取负值并乘以 60。
+ */
+function getLocalOffsetSeconds(): number {
+  return -(new Date().getTimezoneOffset() * 60);
+}
+
 function toChartCandles(candles: CandleData[]): CandlestickData<Time>[] {
+  const offset = getLocalOffsetSeconds();
   return candles.map((c) => ({
-    time: c.time as UTCTimestamp,
+    time: (c.time + offset) as UTCTimestamp,
     open: c.open,
     high: c.high,
     low: c.low,
@@ -28,11 +40,18 @@ function toChartCandles(candles: CandleData[]): CandlestickData<Time>[] {
   }));
 }
 
-function toChartMarkers(markers: MarkerData[]): SeriesMarker<Time>[] {
+/**
+ * 将 marker 时间应用本地时区偏移。
+ * marker 的 time 已在后端 snap 到正确的 candle bar，前端只需加时区偏移。
+ */
+function toChartMarkers(
+  markers: MarkerData[],
+): SeriesMarker<Time>[] {
+  const offset = getLocalOffsetSeconds();
   return markers.map((m) => ({
-    time: m.time as UTCTimestamp,
-    position: m.position as "aboveBar" | "belowBar" | "inBar",
-    shape: m.shape as "arrowUp" | "arrowDown" | "circle" | "square",
+    time: (m.time + offset) as UTCTimestamp,
+    position: m.position,
+    shape: m.shape,
     color: m.color,
     text: m.text,
   }));

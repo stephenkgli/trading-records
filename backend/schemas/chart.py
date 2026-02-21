@@ -5,19 +5,25 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
+
+
+MarkerPosition = Literal["aboveBar", "belowBar", "inBar"]
+MarkerShape = Literal["arrowUp", "arrowDown", "circle", "square"]
+TradeRole = Literal["entry", "add", "trim", "exit"]
 
 
 class MarkerData(BaseModel):
     """A single trade marker for lightweight-charts ``setMarkers()``."""
 
     time: int
-    position: str  # "aboveBar" | "belowBar"
+    position: MarkerPosition
     color: str
-    shape: str  # "arrowUp" | "arrowDown"
+    shape: MarkerShape
     text: str
-    role: str  # "entry" | "add" | "trim" | "exit"
+    role: TradeRole
     trade_id: uuid.UUID
 
 

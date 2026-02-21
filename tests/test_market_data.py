@@ -6,7 +6,6 @@ Tests:
 - build_markers() for long and short directions
 - Marker text formatting (trailing zeros)
 - Marker sorting by executed_at
-- YFinanceProvider with mocked yfinance (including symbol resolution)
 - compute_padded_range() end-time clamping
 """
 
@@ -16,11 +15,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 from backend.services.market_data import (
     OHLCVBar,
-    YFinanceProvider,
     build_markers,
     compute_padded_range,
     default_interval,
@@ -240,112 +237,6 @@ class TestBuildMarkersTextFormatting:
         )
         markers = build_markers([leg], direction="long")
         assert markers[0]["text"] == "ENTRY 0.5 @ 3.14159"
-
-
-# ===========================================================================
-# YFinanceProvider
-# ===========================================================================
-
-
-class TestYFinanceProvider:
-    """Test YFinanceProvider with mocked yfinance library."""
-
-    def setup_method(self):
-        from backend.services.market_data import _ohlcv_cache
-
-        _ohlcv_cache.clear()
-
-    def test_fetch_ohlcv_returns_bars(self):
-        import pandas as pd
-
-        index = pd.DatetimeIndex(
-            [
-                pd.Timestamp("2025-01-15 10:00:00", tz="UTC"),
-                pd.Timestamp("2025-01-15 10:05:00", tz="UTC"),
-            ]
-        )
-        df = pd.DataFrame(
-            {
-                "Open": [182.50, 183.00],
-                "High": [183.20, 183.50],
-                "Low": [182.30, 182.80],
-                "Close": [183.00, 183.40],
-                "Volume": [12345, 23456],
-            },
-            index=index,
-        )
-
-        mock_yf = MagicMock()
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = df
-        mock_yf.Ticker.return_value = mock_ticker
-
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            provider = YFinanceProvider()
-            start = datetime(2025, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
-            end = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
-            bars = provider.fetch_ohlcv("AAPL", "stock", "5m", start, end)
-
-        assert len(bars) == 2
-        assert isinstance(bars[0], OHLCVBar)
-        assert bars[0].open == Decimal("182.50")
-        assert bars[0].volume == 12345
-        assert bars[1].close == Decimal("183.40")
-
-        # Stock symbol should be passed through as-is
-        mock_yf.Ticker.assert_called_once_with("AAPL")
-
-    def test_fetch_ohlcv_empty_df(self):
-        import pandas as pd
-
-        mock_yf = MagicMock()
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = pd.DataFrame()
-        mock_yf.Ticker.return_value = mock_ticker
-
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            provider = YFinanceProvider()
-            start = datetime(2025, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
-            end = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
-            bars = provider.fetch_ohlcv("INVALID", "stock", "5m", start, end)
-
-        assert bars == []
-
-    def test_futures_symbol_resolved_to_yfinance_format(self):
-        """Futures contract MESZ5 should be resolved to MES=F for yfinance."""
-        import pandas as pd
-
-        mock_yf = MagicMock()
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = pd.DataFrame()
-        mock_yf.Ticker.return_value = mock_ticker
-
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            provider = YFinanceProvider()
-            start = datetime(2025, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
-            end = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
-            provider.fetch_ohlcv("MESZ5", "future", "5m", start, end)
-
-        mock_yf.Ticker.assert_called_once_with("MES=F")
-
-
-class TestYFinanceSymbolResolution:
-    """Test YFinanceProvider._resolve_symbol directly."""
-
-    def test_future_mesz5(self):
-        assert YFinanceProvider._resolve_symbol("MESZ5", "future") == "MES=F"
-
-    def test_future_esz24(self):
-        assert YFinanceProvider._resolve_symbol("ESZ24", "future") == "ES=F"
-
-    def test_future_nqh5(self):
-        assert YFinanceProvider._resolve_symbol("NQH5", "future") == "NQ=F"
-
-    def test_stock_unchanged(self):
-        assert YFinanceProvider._resolve_symbol("AAPL", "stock") == "AAPL"
-
-    def test_future_already_base(self):
-        assert YFinanceProvider._resolve_symbol("MES", "future") == "MES=F"
 
 
 # ===========================================================================

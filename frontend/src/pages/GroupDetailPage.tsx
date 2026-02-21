@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { fetchGroupDetail } from "../api/client";
+import { formatDateTime } from "../utils/date";
 
 export default function GroupDetailPage() {
   const { id = "" } = useParams();
@@ -27,8 +28,8 @@ export default function GroupDetailPage() {
         <p><span className="text-gray-500">Direction:</span> {data.direction}</p>
         <p><span className="text-gray-500">Status:</span> {data.status}</p>
         <p><span className="text-gray-500">P&L:</span> {data.realized_pnl ?? "-"}</p>
-        <p><span className="text-gray-500">Opened:</span> {new Date(data.opened_at).toLocaleString()}</p>
-        <p><span className="text-gray-500">Closed:</span> {data.closed_at ? new Date(data.closed_at).toLocaleString() : "-"}</p>
+        <p><span className="text-gray-500">Opened:</span> {formatDateTime(data.opened_at)}</p>
+        <p><span className="text-gray-500">Closed:</span> {formatDateTime(data.closed_at)}</p>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">

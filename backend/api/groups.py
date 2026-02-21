@@ -17,12 +17,17 @@ from backend.models.trade import Trade
 from backend.models.trade_group import TradeGroup, TradeGroupLeg
 from backend.schemas.chart import CandleBar, GroupChartResponse, GroupChartSummary, MarkerData
 from backend.schemas.trade import TradeResponse
+from backend.services.cache.ohlcv_cache import OHLCVCacheService
 from backend.services.market_data import (
-    YFinanceProvider,
+    MarketDataProvider,
     build_markers,
     compute_padded_range,
     default_interval,
 )
+from backend.services.providers.databento_provider import DabentoProvider
+from backend.services.providers.errors import ProviderError
+from backend.services.providers.rate_limit import RateLimitError
+from backend.services.providers.tiingo_provider import TiingoProvider
 from backend.services.trade_grouper import recompute_groups
 from backend.services.analytics import refresh_daily_summaries
 from backend.utils.symbol import normalize_futures_symbol
@@ -30,6 +35,16 @@ from backend.utils.symbol import normalize_futures_symbol
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
+
+
+def _get_provider(asset_class: str) -> MarketDataProvider:
+    """Pick provider by asset class."""
+    if asset_class == "future":
+        return DabentoProvider()
+    elif asset_class in ("stock", "option"):
+        return TiingoProvider()
+    else:
+        raise ProviderError(f"No provider for asset_class={asset_class}")
 
 
 class TradeGroupLegResponse(BaseModel):
@@ -122,7 +137,7 @@ def list_groups(
 def get_group_chart(
     group_id: uuid.UUID,
     interval: str | None = Query(None, pattern=r"^(1m|5m|15m|1h|1d)$", description="K-line interval (1m/5m/15m/1h/1d). Auto-selected by asset class if omitted."),
-    padding: int = Query(20, ge=0, le=200, description="Extra bars before/after trade range"),
+    padding: int = Query(50, ge=0, le=200, description="Extra bars before/after trade range"),
     db: Session = Depends(get_db),
 ) -> GroupChartResponse:
     """Return OHLCV candles and trade markers for a group's chart."""
@@ -151,31 +166,52 @@ def get_group_chart(
 
     # Fetch OHLCV data — provider handles symbol mapping internally
     display_symbol = normalize_futures_symbol(group.symbol, group.asset_class)
-    provider = YFinanceProvider()
-    try:
-        bars = provider.fetch_ohlcv(
-            group.symbol, group.asset_class, resolved_interval, start, end,
-        )
-    except Exception:
-        logger.exception(
-            "ohlcv_fetch_failed",
-            symbol=group.symbol,
-            interval=resolved_interval,
-            group_id=str(group_id),
-        )
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to fetch market data from upstream provider",
-        )
+
+    cache = OHLCVCacheService(db)
+
+    # 1. Try cache
+    bars = cache.get(display_symbol, resolved_interval, start, end)
+
+    if bars is None:
+        # 2. Fetch from provider (fail-fast on error)
+        provider = _get_provider(group.asset_class)
+        try:
+            bars = provider.fetch_ohlcv(
+                group.symbol, group.asset_class, resolved_interval, start, end,
+            )
+        except RateLimitError:
+            raise HTTPException(
+                status_code=429,
+                detail="Provider rate limit exceeded. Try again tomorrow.",
+            )
+        except ProviderError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception:
+            logger.exception(
+                "ohlcv_fetch_failed",
+                symbol=group.symbol,
+                interval=resolved_interval,
+                group_id=str(group_id),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Failed to fetch market data from upstream provider",
+            )
+
+        # 3. Cache completed bars
+        if bars:
+            provider_tag = provider.__class__.__name__.lower().replace("provider", "")
+            cache.put(display_symbol, resolved_interval, group.asset_class, provider_tag, bars)
 
     if not bars:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No market data available for {display_symbol} ({resolved_interval})",
-        )
+        # Return an empty chart instead of 404 so the frontend can still
+        # render markers and group info even when market data is unavailable
+        # (e.g. expired contracts, weekends, provider gaps).
+        bars = []
 
-    # Build markers from legs
-    markers_raw = build_markers(group.legs, group.direction)
+    # Build markers from legs, snap marker times to actual candle bars
+    bar_times = [bar.time for bar in bars]
+    markers_raw = build_markers(group.legs, group.direction, bar_times=bar_times)
     markers = [MarkerData(**m) for m in markers_raw]
 
     candles = [

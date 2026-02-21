@@ -3,35 +3,12 @@
  * Reads API key from localStorage and includes it in all requests.
  */
 
-const API_BASE = "/api/v1";
-
-function getHeaders(): HeadersInit {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
-  const apiKey = localStorage.getItem("apiKey");
-  if (apiKey) {
-    headers["X-API-Key"] = apiKey;
-  }
-  return headers;
-}
-
-function getUploadHeaders(): HeadersInit {
-  const headers: HeadersInit = {};
-  const apiKey = localStorage.getItem("apiKey");
-  if (apiKey) {
-    headers["X-API-Key"] = apiKey;
-  }
-  return headers;
-}
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
-  }
-  return response.json();
-}
+import {
+  getApiBase,
+  getHeaders,
+  getUploadHeaders,
+  handleResponse,
+} from "./endpoints/http";
 
 // Import
 export interface ImportResult {
@@ -71,7 +48,7 @@ export interface ImportLogListResponse {
 export async function uploadCsv(file: File): Promise<ImportResult> {
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`${API_BASE}/import/csv`, {
+  const response = await fetch(`${getApiBase()}/import/csv`, {
     method: "POST",
     headers: getUploadHeaders(),
     body: formData,
@@ -80,7 +57,7 @@ export async function uploadCsv(file: File): Promise<ImportResult> {
 }
 
 export async function triggerFlexQuery(): Promise<ImportResult> {
-  const response = await fetch(`${API_BASE}/import/flex/trigger`, {
+  const response = await fetch(`${getApiBase()}/import/flex/trigger`, {
     method: "POST",
     headers: getHeaders(),
   });
@@ -88,7 +65,7 @@ export async function triggerFlexQuery(): Promise<ImportResult> {
 }
 
 export async function fetchImportLogs(page = 1): Promise<ImportLogListResponse> {
-  const response = await fetch(`${API_BASE}/import/logs?page=${page}`, {
+  const response = await fetch(`${getApiBase()}/import/logs?page=${page}`, {
     headers: getHeaders(),
   });
   return handleResponse(response);
@@ -151,14 +128,14 @@ export async function fetchGroups(
   const params = new URLSearchParams({ page: String(page) });
   if (status) params.set("status", status);
   if (symbol) params.set("symbol", symbol);
-  const response = await fetch(`${API_BASE}/groups?${params}`, {
+  const response = await fetch(`${getApiBase()}/groups?${params}`, {
     headers: getHeaders(),
   });
   return handleResponse(response);
 }
 
 export async function fetchGroupDetail(id: string): Promise<TradeGroupDetail> {
-  const response = await fetch(`${API_BASE}/groups/${id}`, {
+  const response = await fetch(`${getApiBase()}/groups/${id}`, {
     headers: getHeaders(),
   });
   return handleResponse(response);
@@ -168,7 +145,7 @@ export async function recomputeGroups(
   symbol?: string
 ): Promise<{ groups_created: number; groups_closed: number }> {
   const params = symbol ? `?symbol=${symbol}` : "";
-  const response = await fetch(`${API_BASE}/groups/recompute${params}`, {
+  const response = await fetch(`${getApiBase()}/groups/recompute${params}`, {
     method: "POST",
     headers: getHeaders(),
   });

@@ -43,13 +43,17 @@ export interface CandleData {
   volume: number;
 }
 
+export type MarkerPosition = "aboveBar" | "belowBar" | "inBar";
+export type MarkerShape = "arrowUp" | "arrowDown" | "circle" | "square";
+export type TradeRole = "entry" | "add" | "trim" | "exit";
+
 export interface MarkerData {
   time: number;
-  position: string;
+  position: MarkerPosition;
   color: string;
-  shape: string;
+  shape: MarkerShape;
   text: string;
-  role: string;
+  role: TradeRole;
   trade_id: string;
 }
 

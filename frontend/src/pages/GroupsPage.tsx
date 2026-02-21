@@ -11,6 +11,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import TradeChartModal from "../components/TradeChartModal";
+import { normalizeDateValue, formatDateTime } from "../utils/date";
 
 export default function GroupsPage() {
   const queryClient = useQueryClient();
@@ -31,8 +32,22 @@ export default function GroupsPage() {
     },
   });
 
+  const perPage = data?.per_page ?? 50;
+  const pageOffset = (page - 1) * perPage;
+
   const columns = useMemo<ColumnDef<TradeGroup>[]>(
     () => [
+      {
+        id: "rowNumber",
+        header: "#",
+        cell: ({ row, table: tbl }) => {
+          // 使用排序后的行模型中的显示索引，确保排序后序号仍然连续
+          const sortedRows = tbl.getSortedRowModel().rows;
+          const displayIndex = sortedRows.findIndex((r) => r.id === row.id);
+          return pageOffset + (displayIndex >= 0 ? displayIndex : row.index) + 1;
+        },
+        enableSorting: false,
+      },
       {
         accessorKey: "symbol",
         header: "Symbol",
@@ -92,42 +107,29 @@ export default function GroupsPage() {
       {
         accessorKey: "opened_at",
         header: "Opened",
-        cell: ({ getValue }) =>
-          new Intl.DateTimeFormat(undefined, { dateStyle: "short" }).format(
-            new Date(getValue() as string)
-          ),
+        sortingFn: (rowA, rowB) => {
+          const a = normalizeDateValue(rowA.original.opened_at)?.getTime() ?? 0;
+          const b = normalizeDateValue(rowB.original.opened_at)?.getTime() ?? 0;
+          return a - b;
+        },
+        cell: ({ getValue }) => formatDateTime(getValue() as string),
       },
       {
         accessorKey: "closed_at",
         header: "Closed",
         sortingFn: (rowA, rowB) => {
-          const a = rowA.original.closed_at
-            ? new Date(rowA.original.closed_at).getTime()
-            : 0;
-          const b = rowB.original.closed_at
-            ? new Date(rowB.original.closed_at).getTime()
-            : 0;
+          const a = normalizeDateValue(rowA.original.closed_at)?.getTime() ?? 0;
+          const b = normalizeDateValue(rowB.original.closed_at)?.getTime() ?? 0;
           return a - b;
         },
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
-          return val
-            ? new Intl.DateTimeFormat(undefined, { dateStyle: "short" }).format(
-                new Date(val)
-              )
-            : "-";
+          return formatDateTime(val);
         },
       },
-      {
-        accessorKey: "strategy_tag",
-        header: "Tag",
-        cell: ({ getValue }) => {
-          const val = getValue() as string | null;
-          return <span className="text-gray-500">{val || "-"}</span>;
-        },
-      },
+
     ],
-    []
+    [pageOffset]
   );
 
   const table = useReactTable({
@@ -172,6 +174,9 @@ export default function GroupsPage() {
 
       {data && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-2 bg-gray-50 border-b text-sm text-gray-500">
+            共 {data.total} 个交易组
+          </div>
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               {table.getHeaderGroups().map((headerGroup) => (
@@ -230,6 +235,28 @@ export default function GroupsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {data && data.total > (data.per_page ?? 50) && (
+        <div className="flex items-center justify-between">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50"
+          >
+            上一页
+          </button>
+          <span className="text-sm text-gray-500">
+            第 {page} / {Math.ceil(data.total / (data.per_page ?? 50))} 页
+          </span>
+          <button
+            disabled={page >= Math.ceil(data.total / (data.per_page ?? 50))}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50"
+          >
+            下一页
+          </button>
         </div>
       )}
 

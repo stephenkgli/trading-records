@@ -193,17 +193,33 @@ def _mock_candles() -> list[OHLCVBar]:
 
 
 def _patch_yfinance_provider():
-    """Return a patch context manager that mocks YFinanceProvider in the API module.
+    """Return a combined patch context manager that mocks the cache and provider.
 
-    The endpoint instantiates ``YFinanceProvider()`` directly, so we mock the
-    class at its import location in ``backend.api.groups``.  The resulting mock
-    instance's ``fetch_ohlcv`` returns ``_mock_candles()``.
+    The endpoint now uses OHLCVCacheService + _get_provider instead of
+    YFinanceProvider directly. We mock the cache to return None (cache miss)
+    and the provider to return ``_mock_candles()``.
     """
     mock_provider_instance = MagicMock()
     mock_provider_instance.fetch_ohlcv.return_value = _mock_candles()
+    mock_provider_instance.__class__.__name__ = "TiingoProvider"
 
-    mock_cls = MagicMock(return_value=mock_provider_instance)
-    return patch("backend.api.groups.YFinanceProvider", mock_cls)
+    class _PatchContext:
+        def __enter__(self):
+            self._cache_patcher = patch("backend.api.groups.OHLCVCacheService")
+            self._provider_patcher = patch("backend.api.groups._get_provider")
+            mock_cache_cls = self._cache_patcher.start()
+            mock_get_provider = self._provider_patcher.start()
+            mock_cache_instance = MagicMock()
+            mock_cache_instance.get.return_value = None  # cache miss
+            mock_cache_cls.return_value = mock_cache_instance
+            mock_get_provider.return_value = mock_provider_instance
+            return self
+
+        def __exit__(self, *args):
+            self._provider_patcher.stop()
+            self._cache_patcher.stop()
+
+    return _PatchContext()
 
 
 # ---------------------------------------------------------------------------

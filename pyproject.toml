@@ -16,8 +16,9 @@ dependencies = [
     "lxml>=5.3.0",
     "python-multipart>=0.0.18",
     "pyyaml>=6.0.0",
-    "yfinance>=1.2.0",
-    "cachetools>=7.0.1",
+    "databento>=0.44.0",
+    "tiingo>=0.5.0",
+    "python-dateutil>=2.9.0",
 ]
 
 [project.optional-dependencies]

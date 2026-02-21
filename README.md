@@ -37,13 +37,14 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 | - Metrics Cards |     |                    |     | - import_logs    |
 | Trade Table     |     | Dependency Inject. |     | - daily_summaries|
 | Import UI       |     | - TradeService     |     |   (mat. view)   |
-| Analytics Charts|     | - ImportService    |     | - JSONB raw data |
-|                 |     | - AnalyticsService |     |                  |
-| React+TS / Vite |     |                    |     +------------------+
-| api/types/      |     | Unified Exceptions |
-| api/endpoints/  |     | - AppException     |     +------------------+
-| api/hooks/      |     | - Structured JSON  |     |    Services      |
-+-----------------+     +--------------------+     |                  |
+| Analytics Charts|     | - ImportService    |     | - ohlcv_cache    |
+| OHLCV Charts    |     | - AnalyticsService |     | - JSONB raw data |
+|                 |     |                    |     |                  |
+| React+TS / Vite |     | Unified Exceptions |     +------------------+
+| api/types/      |     | - AppException     |
+| api/endpoints/  |     | - Structured JSON  |     +------------------+
+| api/hooks/      |     +--------------------+     |    Services      |
++-----------------+                                |                  |
                                                    | Trade Grouper    |
                         +--------------------+     | - FIFO matching  |
                         |    Config          |     | - Round-trip     |
@@ -58,6 +59,37 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
                                                    | - Idempotency    |
                                                    +------------------+
 ```
+
+### Market Data Providers
+
+```
+GET /api/v1/groups/{id}/chart
+        |
+        v
+  OHLCVCacheService (PostgreSQL)
+  1. Check cache for completed bars
+  2. On miss: fetch from provider, filter in-progress bars, cache, return
+  3. On provider error: propagate immediately (fail-fast)
+        |
+        v
+  Pick provider by asset_class:
+    future -> DabentoProvider (Databento)
+    stock  -> TiingoProvider (Tiingo)
+        |                       |
+        v                       v
+  DabentoProvider         TiingoProvider
+  - CME futures            - US stocks
+  - 1m/5m/15m/1h/1d bars  - Daily bars (free tier)
+  - UTC normalization      - Adjusted prices
+  - Continuous contracts   - Split/dividend adjusted
+```
+
+- **Databento** for CME futures OHLCV bars (ES, MES, NQ, MNQ, etc.)
+- **Tiingo** for US stock daily OHLCV bars (equities)
+- **PostgreSQL `ohlcv_cache` table** for permanent storage of completed bars
+- **Daily call counters** per provider to stay within API limits (400/day Tiingo, 500/day Databento)
+- **Bar validation** rejects invalid OHLCV data before caching
+- **In-progress bar filtering** ensures only completed candles are cached
 
 ### Data Flow
 
@@ -82,6 +114,8 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 - **Environment-aware config** - Settings loaded per environment (dev/test/prod) via `APP_ENV`
 - **Unified exceptions** - Structured JSON error responses with error code, message, and context
 - **Dependency injection** - Services injected via FastAPI `Depends()` for testability
+- **Fail-fast market data** - Provider errors propagate directly; no fallback chains or circuit breakers
+- **Permanent OHLCV cache** - Completed bars cached forever in PostgreSQL; no expiry, no staleness checks
 
 ## Features
 
@@ -94,6 +128,11 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 - Composite-key deduplication (safe to re-import)
 - FIFO trade grouping into round-trips (long/short, entry/exit/add/trim)
 - Strategy tagging and journal notes on trade groups
+- OHLCV price charts with trade markers (Lightweight Charts)
+  - Databento for CME futures (continuous front-month contracts)
+  - Tiingo for US stocks (split/dividend-adjusted prices)
+  - PostgreSQL OHLCV cache with in-progress bar filtering
+  - Daily rate limiting per provider
 - P&L calendar heatmap, equity curve, per-symbol breakdown
 - Key metrics dashboard (win rate, profit factor, average win/loss)
 - Sortable/filterable trade table
@@ -118,9 +157,7 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 - Multi-user / multi-tenant
 - Options exercise/assignment handling
 - Futures rollover linking
-- Stock split adjustment
 - Multi-leg options strategy grouping
-- Price charts with trade overlays (TradingView Lightweight Charts planned)
 - Push notifications / alerts
 - PostgreSQL-backed job scheduling (currently in-process APScheduler)
 - WAL archiving / point-in-time recovery
@@ -133,6 +170,7 @@ Self-hosted trading records system for capturing, normalizing, and analyzing tra
 | Charts     | Recharts, Lightweight Charts                                |
 | State      | Zustand, TanStack React Query v5, TanStack React Table v8  |
 | Backend    | Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic             |
+| Market Data| Databento (futures), Tiingo (stocks)                        |
 | Database   | PostgreSQL 16                                               |
 | Migrations | Alembic                                                     |
 | Testing    | pytest, pytest-asyncio, respx, testcontainers               |
@@ -157,6 +195,7 @@ trading-records/
 │   ├── auth.py              # API key middleware
 │   ├── api/                 # REST route handlers
 │   │   ├── v1/              # Versioned router aggregation (/api/v1)
+│   │   ├── market_data.py   # OHLCV cache admin endpoints
 │   │   └── dependencies.py  # Service dependency injection (Depends)
 │   ├── ingestion/           # Import pipeline
 │   │   ├── pipeline.py      # IngestionPipeline orchestrator
@@ -172,14 +211,24 @@ trading-records/
 │   │   ├── normalizer.py    # Broker-specific normalization
 │   │   └── validator.py     # Field and range validation
 │   ├── models/              # SQLAlchemy ORM models
+│   │   └── ohlcv_cache.py   # OHLCV cache table model
 │   ├── schemas/             # Pydantic request/response schemas
 │   ├── services/            # Domain services
 │   │   ├── trade_service.py      # Trade query logic
 │   │   ├── import_service.py     # Import orchestration
 │   │   ├── analytics_service.py  # Analytics query wrapper
 │   │   ├── analytics.py          # P&L aggregation and summaries
+│   │   ├── market_data.py        # MarketDataProvider protocol + helpers
 │   │   ├── trade_grouper.py      # FIFO round-trip matching
-│   │   └── scheduler.py          # APScheduler management
+│   │   ├── scheduler.py          # APScheduler management
+│   │   ├── providers/            # Market data provider implementations
+│   │   │   ├── databento_provider.py  # CME futures via Databento
+│   │   │   ├── tiingo_provider.py     # US stocks via Tiingo
+│   │   │   ├── validation.py          # OHLCV bar integrity checks
+│   │   │   ├── rate_limit.py          # Daily API call counters
+│   │   │   └── errors.py             # Provider error hierarchy
+│   │   └── cache/                # OHLCV cache layer
+│   │       └── ohlcv_cache.py    # PostgreSQL cache service
 │   └── migrations/          # Alembic migration versions
 ├── config/
 │   └── config.example.yaml  # Configuration template
@@ -196,13 +245,20 @@ trading-records/
 │   ├── conftest.py          # SQLite test fixtures and session setup
 │   ├── fixtures/            # Sample broker data (XML, JSON, CSV)
 │   ├── test_api/            # API integration tests
+│   ├── test_providers/      # Market data provider tests
+│   │   ├── test_validation.py         # Bar validation tests
+│   │   ├── test_rate_limit.py         # Rate limiter tests
+│   │   ├── test_databento_provider.py # Databento provider tests (mocked)
+│   │   ├── test_tiingo_provider.py    # Tiingo provider tests (mocked)
+│   │   ├── test_ohlcv_cache.py        # Cache service tests
+│   │   └── test_chart_endpoint.py     # Chart endpoint integration tests
 │   ├── test_pipeline.py     # Ingestion pipeline tests
 │   ├── test_services.py     # Service layer tests
 │   ├── test_exceptions.py   # Exception handling tests
 │   ├── test_config.py       # Config loading tests
 │   └── test_dependencies.py # DI tests
 ├── docs/
-│   └── REFACTOR_PLAN.md     # Refactoring plan and design rationale
+│   └── design-market-data-providers.md  # Market data provider design doc
 ├── Dockerfile               # Multi-stage build (Node + Python)
 ├── docker-compose.yml       # PostgreSQL + FastAPI
 ├── pyproject.toml           # Python dependencies (uv)
@@ -321,6 +377,22 @@ No configuration required. Upload CSV/XLSX files via the Import page or API. The
 - **Tradovate trade history CSV** (exported from platform)
 - Unknown formats fall back to user-provided column mapping
 
+### Market Data Providers
+
+OHLCV chart data is fetched from two purpose-built providers. Set API keys in `.env`:
+
+```
+DATABENTO_API_KEY=db-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TIINGO_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OHLCV_CACHE_ENABLED=true
+```
+
+**Databento** (futures): Sign up at [databento.com](https://databento.com). Usage-based pricing (~$0.50/GB). With the PostgreSQL cache, typical usage is < $0.01/month.
+
+**Tiingo** (stocks): Sign up at [tiingo.com](https://www.tiingo.com). Free tier provides 500 API calls/day for end-of-day data. The daily call counter is set to 400 as a safety margin.
+
+Completed bars are cached permanently in PostgreSQL. After initial fetches, subsequent chart views are served from cache with no provider calls.
+
 ## Importing Trades
 
 **CSV Upload:**
@@ -365,6 +437,7 @@ All endpoints are served under the `/api/v1` prefix. Error responses follow a un
 | GET     | `/api/v1/trades/summary`             | Trade summary metrics                     |
 | GET     | `/api/v1/groups`                     | List trade groups                         |
 | GET     | `/api/v1/groups/{id}`                | Group detail with legs                    |
+| GET     | `/api/v1/groups/{id}/chart`          | OHLCV candles + trade markers             |
 | PATCH   | `/api/v1/groups/{id}`                | Update strategy tag / notes               |
 | POST    | `/api/v1/groups/recompute`           | Recompute grouping for symbol             |
 | POST    | `/api/v1/import/csv`                 | Upload and import CSV                     |
@@ -376,6 +449,7 @@ All endpoints are served under the `/api/v1` prefix. Error responses follow a un
 | GET     | `/api/v1/analytics/by-symbol`        | Per-symbol statistics                     |
 | GET     | `/api/v1/analytics/by-strategy`      | Per-strategy statistics                   |
 | GET     | `/api/v1/analytics/performance`      | Overall performance metrics               |
+| DELETE  | `/api/v1/market-data/cache`          | Invalidate OHLCV cache (admin)            |
 | GET     | `/api/v1/config`                     | Read runtime config (redacted secrets)    |
 | PUT     | `/api/v1/config`                     | Update runtime config                     |
 
@@ -388,7 +462,7 @@ uv run pytest tests/ -v
 uv run pytest tests/ --cov=backend --cov-report=term-missing
 ```
 
-Tests use SQLite in-memory databases for speed. PostgreSQL-specific features (materialized views, JSONB operations) are guarded by dialect checks so tests run without a PostgreSQL instance.
+Tests use SQLite in-memory databases for speed. PostgreSQL-specific features (materialized views, JSONB operations, upsert with `ON CONFLICT`) are guarded by dialect checks so tests run without a PostgreSQL instance.
 
 ## License
 

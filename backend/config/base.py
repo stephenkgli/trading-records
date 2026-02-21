@@ -38,6 +38,15 @@ class BaseAppSettings(BaseSettings):
     tradovate_device_id: str = ""
     tradovate_schedule: str = "0 6 * * *"
 
+    # Databento
+    databento_api_key: str = ""
+
+    # Tiingo
+    tiingo_api_key: str = ""
+
+    # Cache
+    ohlcv_cache_enabled: bool = True
+
     # Logging
     log_level: str = "INFO"
 
