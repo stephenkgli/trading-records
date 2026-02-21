@@ -1,224 +1,128 @@
 # Trading Records
 
-Self-hosted trading records system for capturing, normalizing, and analyzing trading data from Interactive Brokers (IBKR) and Tradovate CSV exports, with full data ownership.
+自托管交易记录系统，用于导入、标准化、分组并分析交易数据（目前支持 IBKR 与 Tradovate CSV/XLSX），并提供 K 线与交易标记图表。
 
 ## Architecture
 
-```
-+------------------+     +--------------------+     +------------------+
-|  Data Sources    |     |   Ingestion Layer  |     |      Core        |
-|                  |     |                    |     |                  |
-| CSV / XLSX      -+---->| ImportSource       |     |                  |
-| (Manual Upload)  |     | (pluggable iface)  |     | Normalizer       |
-|                  |     |                    |     | - Broker-specific|
-|                  |     | Sources:           |     |   to unified     |
-|                  |     | - CsvSource        +---->|   NormalizedTrade|
-|                  |     |                    |     |                  |
-|                  |     |                    |     | Validator        |
-|                  |     |                    |     | - Required fields|
-|                  |     | IngestionPipeline  |     | - Range checks   |
-+------------------+     | (orchestrator)     |     | - Timestamp sanity
-                         +--------------------+     |                  |
-                                                    | Dedup Engine     |
-                                                    | - Composite key  |
-                                                    |   (broker +      |
-                                                    |    broker_exec_id)
-                                                    +--------+---------+
-                                                             |
-                                                    Atomic Transaction
-                                                             |
-                                                             v
-+-----------------+     +--------------------+     +------------------+
-|    Frontend     |     |    API Layer       |     |    Database      |
-|                 |     |                    |     |                  |
-| Dashboard       |     | FastAPI + CORS     |     | PostgreSQL 16    |
-| - P&L Calendar  |<----+ API Key Auth       |<----+ - trades         |
-| - Equity Curve  |     | /api/v1 prefix     |     | - trade_groups   |
-| - Metrics Cards |     |                    |     | - import_logs    |
-| Trade Table     |     | Dependency Inject. |     | - daily_summaries|
-| Import UI       |     | - TradeService     |     |   (mat. view)   |
-| Analytics Charts|     | - ImportService    |     | - ohlcv_cache    |
-| OHLCV Charts    |     | - AnalyticsService |     | - JSONB raw data |
-|                 |     |                    |     |                  |
-| React+TS / Vite |     | Unified Exceptions |     +------------------+
-| api/types/      |     | - AppException     |
-| api/endpoints/  |     | - Structured JSON  |     +------------------+
-| api/hooks/      |     +--------------------+     |    Services      |
-+-----------------+                                |                  |
-                                                   | Trade Grouper    |
-                        +--------------------+     | - FIFO matching  |
-                        |    Config          |     | - Round-trip     |
-                        |                    |     |   tracking       |
-                        | Pydantic settings  |     |                  |
-                        | - .env loading     |     | Analytics Engine |
-                        | - Runtime updates  |     | - P&L aggregation|
-                        | - Typed fields     |     | - Daily summaries|
-                        +--------------------+     |                  |
-                                                   | Scheduler        |
-                                                   | - APScheduler    |
-                                                   | - Idempotency    |
-                                                   +------------------+
-```
+系统由四层组成，核心链路如下：
 
-### Market Data Providers
+1. Data Ingestion
+- 上传 CSV/XLSX（Import API 或前端页面）
+- 解析与格式识别（IBKR / Tradovate）
+- 标准化、校验、去重（`broker + broker_exec_id`）
+- 原始数据持久化（`raw_data`）
 
-```
-GET /api/v1/groups/{id}/chart
-        |
-        v
-  OHLCVCacheService (PostgreSQL)
-  1. Check cache for completed bars
-  2. On miss: fetch from provider, filter in-progress bars, cache, return
-  3. On provider error: propagate immediately (fail-fast)
-        |
-        v
-  Pick provider by asset_class:
-    future -> DabentoProvider (Databento)
-    stock  -> TiingoProvider (Tiingo)
-        |                       |
-        v                       v
-  DabentoProvider         TiingoProvider
-  - CME futures            - US stocks
-  - 1m/5m/15m/1h/1d bars  - Daily bars (free tier)
-  - UTC normalization      - Adjusted prices
-  - Continuous contracts   - Split/dividend adjusted
-```
+2. Domain Services
+- 交易分组（FIFO，生成 round-trip trade groups）
+- 分析统计（按日期、品种、策略、绩效指标）
+- 图表数据服务（OHLCV 缓存 + 市场数据 Provider）
 
-- **Databento** for CME futures OHLCV bars (ES, MES, NQ, MNQ, etc.)
-- **Tiingo** for US stock daily OHLCV bars (equities)
-- **PostgreSQL `ohlcv_cache` table** for permanent storage of completed bars
-- **Daily call counters** per provider to stay within API limits (400/day Tiingo, 500/day Databento)
-- **Bar validation** rejects invalid OHLCV data before caching
-- **In-progress bar filtering** ensures only completed candles are cached
+3. API Layer
+- FastAPI + `/api/v1` 路由
+- API Key 鉴权
+- 统一错误响应与结构化日志
 
-### Data Flow
+4. Storage
+- PostgreSQL 16（生产）
+- 关键表：`trades`、`trade_groups`、`trade_group_legs`、`import_logs`、`ohlcv_cache`
+- 物化视图：`daily_summaries`
 
-1. **Ingestion** - Import trades from IBKR and Tradovate CSV/XLSX files via pluggable `ImportSource` implementations
-2. **Pipeline** - `IngestionPipeline` orchestrates: source.fetch -> validate -> dedup -> persist
-3. **Normalization** - Convert broker-specific formats into a unified `NormalizedTrade` Pydantic schema
-4. **Validation** - Verify required fields, value ranges, and timestamp consistency (all UTC)
-5. **Deduplication** - Composite key check (`broker + broker_exec_id`) prevents duplicate records
-6. **Persistence** - Atomic transaction writes trades to PostgreSQL; raw broker payloads preserved in JSONB
-7. **Grouping** - Standalone FIFO algorithm matches buy/sell pairs into round-trip trade groups (re-runnable, decoupled from import)
-8. **Analytics** - P&L dynamically computed; daily summaries via materialized views, refreshed after each import
+## Key Features
 
-### Key Design Decisions
+- 多券商交易导入（IBKR / Tradovate）
+- 自动格式识别与标准化
+- 原始数据保留（审计/复算友好）
+- 去重导入（可重复导入同一文件）
+- FIFO 交易分组（支持多次重算）
+- Analytics 页面（绩效、按品种统计、权益曲线）
+- Groups 页面（状态/排序/资产类型筛选）
+- Group 详情 K 线图（交易标记）
+- 市场数据 Provider（Databento / Tiingo）+ PostgreSQL 缓存
+- FastAPI + React TypeScript 单仓库开发体验
 
-- **Batch-first** - Reliable batch imports over real-time streaming
-- **Raw data preservation** - Original broker payloads stored in JSONB for audit and reprocessing
-- **Atomic imports** - All-or-nothing transactions ensure data consistency
-- **UTC everywhere** - All timestamps stored as `timestamptz`; display-time conversion in frontend
-- **Single container** - Frontend built as static files and served from FastAPI
-- **Pluggable sources** - New import sources implement the `ImportSource` interface without modifying the pipeline
-- **Service layer** - Business logic concentrated in services; API handlers remain thin request/response mappers
-- **Pydantic config** - Settings loaded from environment variables and `.env`
-- **Unified exceptions** - Structured JSON error responses with error code, message, and context
-- **Dependency injection** - Services injected via FastAPI `Depends()` for testability
-- **Fail-fast market data** - Provider errors propagate directly; no fallback chains or circuit breakers
-- **Permanent OHLCV cache** - Completed bars cached forever in PostgreSQL; no expiry, no staleness checks
+## Quick Start
 
-## Tech Stack
+### 1) Prerequisites
 
-| Layer      | Technology                                                  |
-|------------|-------------------------------------------------------------|
-| Frontend   | React 18, TypeScript 5.7, Vite 6, Tailwind CSS 3           |
-| Charts     | Recharts, Lightweight Charts                                |
-| State      | Zustand, TanStack React Query v5, TanStack React Table v8  |
-| Backend    | Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic             |
-| Market Data| Databento (futures), Tiingo (stocks)                        |
-| Database   | PostgreSQL 16                                               |
-| Migrations | Alembic                                                     |
-| Testing    | pytest, pytest-asyncio, respx, testcontainers               |
-| Deploy     | Docker, Docker Compose                                      |
-| Deps       | uv (Python), npm (Frontend)                                 |
+- Docker + Docker Compose
+- 或本地开发环境：Python 3.12+、`uv`、Node.js 20+、PostgreSQL 16
 
-## Getting Started
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- Or for local development:
-  - Python 3.12+
-  - [uv](https://github.com/astral-sh/uv) (Python package manager)
-  - Node.js 20+
-  - PostgreSQL 16
-
-### Option 1: Docker Compose (Recommended)
+### 2) Docker（推荐）
 
 ```bash
 git clone <repo-url>
 cd trading-records
 cp .env.example .env
-# Edit .env with your API keys and local settings
 docker compose up -d
 docker compose exec app alembic upgrade head
 ```
 
-Access: http://localhost:8000 (frontend) | http://localhost:8000/docs (API docs)
+访问：
+- App: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-### Option 2: Local Development
+### 3) 本地开发
 
 ```bash
 git clone <repo-url>
 cd trading-records
 cp .env.example .env
-
-# Start PostgreSQL
-docker run -d --name trading-pg \
-  -e POSTGRES_USER=trading \
-  -e POSTGRES_PASSWORD=trading \
-  -e POSTGRES_DB=trading_records \
-  -p 5432:5432 \
-  postgres:16-alpine
 
 # Backend
 uv sync
 uv run alembic upgrade head
 uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
-# Frontend (separate terminal)
+# Frontend（新终端）
 cd frontend
 npm install
 npm run dev
 ```
 
-Access: http://localhost:3000 (Vite dev) | http://localhost:8000 (API) | http://localhost:8000/docs
+访问：
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-## Broker Configuration
+## Configuration
 
-### CSV Import
+通过环境变量与 `.env` 配置，常见项如下：
 
-No configuration required. Upload CSV/XLSX files via the Import page or API. The system auto-detects:
-- **IBKR Activity Statement CSV** (exported from Account Management)
-- **Tradovate trade history CSV** (exported from platform)
-- Unknown formats fall back to user-provided column mapping
+```env
+DATABASE_URL=postgresql://trading:trading@localhost:5432/trading_records
+API_KEY=
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000
 
-### Market Data Providers
-
-OHLCV chart data is fetched from two purpose-built providers. Set API keys in `.env`:
-
-```
-DATABENTO_API_KEY=db-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TIINGO_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DATABENTO_API_KEY=
+TIINGO_API_KEY=
 OHLCV_CACHE_ENABLED=true
+
+LOG_LEVEL=INFO
+IBKR_CSV_TIMEZONE=America/New_York
+TRADOVATE_CSV_TIMEZONE=Asia/Shanghai
 ```
 
-**Databento** (futures): Sign up at [databento.com](https://databento.com). Usage-based pricing (~$0.50/GB). With the PostgreSQL cache, typical usage is < $0.01/month.
-
-**Tiingo** (stocks): Sign up at [tiingo.com](https://www.tiingo.com). Free tier provides 500 API calls/day for end-of-day data. The daily call counter is set to 400 as a safety margin.
-
-Completed bars are cached permanently in PostgreSQL. After initial fetches, subsequent chart views are served from cache with no provider calls.
-
-## Running Tests
+## Testing
 
 ```bash
 uv run pytest tests/ -v
-
-# With coverage
 uv run pytest tests/ --cov=backend --cov-report=term-missing
 ```
 
-Tests use SQLite in-memory databases for speed. PostgreSQL-specific features (materialized views, JSONB operations, upsert with `ON CONFLICT`) are guarded by dialect checks so tests run without a PostgreSQL instance.
+说明：测试默认使用 SQLite in-memory；生产数据库能力以 PostgreSQL 为准。
+
+## Project Structure
+
+- `backend/api/`：HTTP 路由
+- `backend/services/`：业务逻辑（分组、分析、市场数据）
+- `backend/ingestion/`：导入链路（解析/标准化/校验/去重）
+- `backend/models/`：SQLAlchemy ORM
+- `backend/schemas/`：Pydantic schema
+- `backend/migrations/`：Alembic 迁移
+- `frontend/src/pages/`：页面
+- `frontend/src/components/`：可复用组件
+- `frontend/src/api/`：类型与请求封装
+- `tests/`：测试
 
 ## License
 
