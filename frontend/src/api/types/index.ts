@@ -4,6 +4,9 @@
 
 export type {
   ImportResult,
+  FileImportResult,
+  BatchImportAggregate,
+  BatchImportResponse,
   ImportLog,
   ImportLogListResponse,
 } from "./imports";

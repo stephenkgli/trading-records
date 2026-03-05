@@ -21,42 +21,102 @@ class TestCSVUpload:
         """Uploading a valid IBKR CSV should succeed."""
         response = client.post(
             "/api/v1/import/csv",
-            files={"file": ("ibkr_activity.csv", ibkr_activity_csv, "text/csv")},
+            files=[("file", ("ibkr_activity.csv", ibkr_activity_csv, "text/csv"))],
         )
-        assert response.status_code in (200, 201)
+        assert response.status_code == 200
         data = response.json()
-        assert "records_imported" in data
+
+        assert "aggregate" in data
+        assert "files" in data
+        assert data["aggregate"]["files_total"] == 1
+        assert len(data["files"]) == 1
+        assert data["files"][0]["records_imported"] >= 1
 
     def test_upload_tradovate_performance_csv(
         self,
         client,
-        
         tradovate_performance_csv,
         tradovate_expected_trade_count,
     ):
         """Uploading Tradovate Performance CSV should succeed with full count."""
         response = client.post(
             "/api/v1/import/csv",
-            files={"file": ("Performance.csv", tradovate_performance_csv, "text/csv")},
+            files=[("file", ("Performance.csv", tradovate_performance_csv, "text/csv"))],
         )
-        assert response.status_code in (200, 201)
+        assert response.status_code == 200
         data = response.json()
-        assert data["records_total"] == tradovate_expected_trade_count
-        assert data["records_imported"] == tradovate_expected_trade_count
 
-    def test_upload_empty_csv(self, client):
-        """Uploading an empty CSV should return 400."""
+        assert data["aggregate"]["records_total"] == tradovate_expected_trade_count
+        assert data["aggregate"]["records_imported"] == tradovate_expected_trade_count
+
+    def test_upload_multiple_csv_success(
+        self,
+        client,
+        ibkr_activity_csv,
+        tradovate_performance_csv,
+    ):
+        """Uploading multiple CSV files should aggregate stats and file details."""
         response = client.post(
             "/api/v1/import/csv",
-            files={"file": ("empty.csv", b"", "text/csv")},
+            files=[
+                ("file", ("ibkr_activity.csv", ibkr_activity_csv, "text/csv")),
+                ("file", ("Performance.csv", tradovate_performance_csv, "text/csv")),
+            ],
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["aggregate"]["files_total"] == 2
+        assert len(data["files"]) == 2
+        assert data["aggregate"]["files_failed"] == 0
+
+    def test_upload_partial_failure_continue(self, client, ibkr_activity_csv):
+        """One failed file should not block successful files."""
+        response = client.post(
+            "/api/v1/import/csv",
+            files=[
+                ("file", ("ibkr_activity.csv", ibkr_activity_csv, "text/csv")),
+                ("file", ("unknown.csv", b"foo,bar\n1,2\n", "text/csv")),
+            ],
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["aggregate"]["files_total"] == 2
+        assert data["aggregate"]["files_failed"] == 1
+        assert data["aggregate"]["status"] == "partial"
+
+    def test_upload_cross_file_dedup(self, client, ibkr_activity_csv):
+        """Duplicate records across files in one batch should be deduplicated."""
+        response = client.post(
+            "/api/v1/import/csv",
+            files=[
+                ("file", ("ibkr_activity.csv", ibkr_activity_csv, "text/csv")),
+                ("file", ("ibkr_activity.csv", ibkr_activity_csv, "text/csv")),
+            ],
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["aggregate"]["files_total"] == 2
+        assert data["aggregate"]["records_skipped_dup"] >= 1
+
+    def test_upload_empty_csv(self, client):
+        """Uploading an empty CSV should mark file as failed in batch result."""
+        response = client.post(
+            "/api/v1/import/csv",
+            files=[("file", ("empty.csv", b"", "text/csv"))],
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["aggregate"]["files_total"] == 1
+        assert data["aggregate"]["files_failed"] == 1
+        assert data["aggregate"]["status"] == "failed"
 
     def test_upload_no_file(self, client):
         """Request without a file should return 422."""
-        response = client.post(
-            "/api/v1/import/csv",
-        )
+        response = client.post("/api/v1/import/csv")
         assert response.status_code == 422
 
 

@@ -8,11 +8,13 @@ import {
   getUploadHeaders,
   handleResponse,
 } from "./http";
-import type { ImportResult, ImportLogListResponse } from "../types";
+import type { BatchImportResponse, ImportLogListResponse } from "../types";
 
-export async function uploadCsv(file: File): Promise<ImportResult> {
+export async function uploadCsv(files: File[]): Promise<BatchImportResponse> {
   const formData = new FormData();
-  formData.append("file", file);
+  for (const file of files) {
+    formData.append("file", file);
+  }
   const response = await fetch(`${getApiBase()}/import/csv`, {
     method: "POST",
     headers: getUploadHeaders(),

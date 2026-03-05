@@ -1,13 +1,13 @@
 import { useCallback, useState } from "react";
 
 interface CsvUploadProps {
-  onUpload: (file: File) => void;
+  onUpload: (files: File[]) => void;
   isLoading: boolean;
 }
 
 export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
   const [dragActive, setDragActive] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -19,27 +19,29 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
     }
   }, []);
 
+  const updateSelectedFiles = useCallback((fileList: FileList | null) => {
+    const files = Array.from(fileList ?? []);
+    if (files.length > 0) {
+      setSelectedFiles(files);
+    }
+  }, []);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setSelectedFile(file);
-    }
-  }, []);
+    updateSelectedFiles(e.dataTransfer.files);
+  }, [updateSelectedFiles]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-    }
-  }, []);
+    updateSelectedFiles(e.target.files);
+  }, [updateSelectedFiles]);
 
   const handleSubmit = useCallback(() => {
-    if (selectedFile) {
-      onUpload(selectedFile);
+    if (selectedFiles.length > 0) {
+      onUpload(selectedFiles);
     }
-  }, [selectedFile, onUpload]);
+  }, [selectedFiles, onUpload]);
 
   return (
     <div className="space-y-4">
@@ -61,12 +63,13 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
           className="hidden"
           id="csv-upload"
           disabled={isLoading}
+          multiple
         />
         <label htmlFor="csv-upload" className="cursor-pointer">
           <p className="text-gray-600">
-            {selectedFile
-              ? selectedFile.name
-              : "Drag and drop a CSV file here, or click to browse"}
+            {selectedFiles.length > 0
+              ? `Selected ${selectedFiles.length} file(s)`
+              : "Drag and drop CSV files here, or click to browse"}
           </p>
           <p className="text-xs text-gray-400 mt-1">
             Supports IBKR Activity Statement CSV, Tradovate CSV exports, and
@@ -75,13 +78,13 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
         </label>
       </div>
 
-      {selectedFile && (
+      {selectedFiles.length > 0 && (
         <button
           onClick={handleSubmit}
           disabled={isLoading}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isLoading ? "Importing..." : `Import ${selectedFile.name}`}
+          {isLoading ? "Importing..." : `Import ${selectedFiles.length} file(s)`}
         </button>
       )}
     </div>

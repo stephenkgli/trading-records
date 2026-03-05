@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ImportLogResponse(BaseModel):
@@ -38,7 +38,43 @@ class ImportResult(BaseModel):
     records_imported: int
     records_skipped_dup: int
     records_failed: int
-    errors: list[dict] = []
+    errors: list[dict] = Field(default_factory=list)
+
+
+class FileImportResult(BaseModel):
+    """Per-file result in batch import response."""
+
+    filename: str
+    status: str
+    import_log_id: uuid.UUID | None = None
+    source: str = "csv"
+    records_total: int = 0
+    records_imported: int = 0
+    records_skipped_dup: int = 0
+    records_failed: int = 0
+    errors: list[dict] = Field(default_factory=list)
+    file_error: str | None = None
+
+
+class BatchImportAggregate(BaseModel):
+    """Aggregated counters for a batch import."""
+
+    status: str
+    files_total: int
+    files_success: int
+    files_partial: int
+    files_failed: int
+    records_total: int
+    records_imported: int
+    records_skipped_dup: int
+    records_failed: int
+
+
+class BatchImportResponse(BaseModel):
+    """Response returned after importing multiple CSV files."""
+
+    aggregate: BatchImportAggregate
+    files: list[FileImportResult]
 
 
 class ImportLogListResponse(BaseModel):
