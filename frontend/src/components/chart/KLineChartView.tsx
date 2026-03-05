@@ -52,6 +52,8 @@ function convertCandles(candles: CandleData[]): KLineData[] {
   }));
 }
 
+const OVERLAY_PATCH_POLL_MS = 1000;
+
 export { convertCandles };
 export type { KLineChartViewProps };
 
@@ -316,12 +318,17 @@ export default function KLineChartView({
     const chart = chartRef.current;
     if (!chart) return;
 
-    const interval = setInterval(() => {
+    const patchUserDrawingOverlays = () => {
       const overlays = chart.getOverlays({ groupId: "user-drawings" });
       for (const ov of overlays) {
         patchOverlay(chart, ov.id);
       }
-    }, 500);
+    };
+
+    // Run once immediately to reduce first-patch latency.
+    patchUserDrawingOverlays();
+
+    const interval = setInterval(patchUserDrawingOverlays, OVERLAY_PATCH_POLL_MS);
 
     return () => clearInterval(interval);
   }, [patchOverlay]);

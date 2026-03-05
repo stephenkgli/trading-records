@@ -38,7 +38,7 @@ export default function AnalyticsPage() {
   const initializedRef = useRef(false);
 
   // 获取可用资产类型列表
-  const { data: availableAssetClasses = [] } = useQuery({
+  const { data: availableAssetClasses = [], isFetched: isAssetClassesFetched } = useQuery({
     queryKey: ["availableAssetClasses"],
     queryFn: fetchAvailableAssetClasses,
     staleTime: 5 * 60 * 1000, // 5分钟缓存
@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
 
   // 当 availableAssetClasses 加载完成后，初始化选择状态
   useEffect(() => {
-    if (availableAssetClasses.length === 0 || initializedRef.current) return;
+    if (!isAssetClassesFetched || initializedRef.current) return;
     initializedRef.current = true;
 
     const saved = loadSavedSelection();
@@ -59,7 +59,7 @@ export default function AnalyticsPage() {
       const restored = saved.filter((ac) => validSet.has(ac));
       setSelectedAssetClasses(restored);
     }
-  }, [availableAssetClasses]);
+  }, [availableAssetClasses, isAssetClassesFetched]);
 
   // 选择变化时持久化到 localStorage
   useEffect(() => {
@@ -79,16 +79,19 @@ export default function AnalyticsPage() {
   const { data: metrics } = useQuery({
     queryKey: ["performance", dateRange.from, dateRange.to, assetClassesParam],
     queryFn: () => fetchPerformance(dateRange.from, dateRange.to, assetClassesParam),
+    enabled: selectedAssetClasses !== null,
   });
 
   const { data: symbols } = useQuery({
     queryKey: ["bySymbol", dateRange.from, dateRange.to, assetClassesParam],
     queryFn: () => fetchBySymbol(dateRange.from, dateRange.to, assetClassesParam),
+    enabled: selectedAssetClasses !== null,
   });
 
   const { data: dailyData } = useQuery({
     queryKey: ["dailySummaries", dateRange.from, dateRange.to, assetClassesParam],
     queryFn: () => fetchDailySummaries(dateRange.from, dateRange.to, assetClassesParam),
+    enabled: selectedAssetClasses !== null,
   });
 
   const stats = useMemo(() => {

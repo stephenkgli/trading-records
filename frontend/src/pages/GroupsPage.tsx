@@ -21,6 +21,10 @@ const TradeChartModal = lazy(() => import("../components/TradeChartModal"));
 
 const STORAGE_KEY = "groups_asset_class_filter";
 
+type GroupsTableMeta = {
+  pageOffset: number;
+};
+
 function loadSavedSelection(): string[] | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -58,14 +62,14 @@ export default function GroupsPage() {
   const assetClassesParam =
     selectedAssetClasses === null ? undefined : selectedAssetClasses;
 
-  const { data: availableAssetClasses = [] } = useQuery({
+  const { data: availableAssetClasses = [], isFetched: isAssetClassesFetched } = useQuery({
     queryKey: ["availableAssetClasses"],
     queryFn: fetchAvailableAssetClasses,
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
-    if (availableAssetClasses.length === 0 || initializedRef.current) return;
+    if (!isAssetClassesFetched || initializedRef.current) return;
     initializedRef.current = true;
 
     const saved = loadSavedSelection();
@@ -76,7 +80,7 @@ export default function GroupsPage() {
       const restored = saved.filter((ac) => validSet.has(ac));
       setSelectedAssetClasses(restored);
     }
-  }, [availableAssetClasses]);
+  }, [availableAssetClasses, isAssetClassesFetched]);
 
   useEffect(() => {
     if (selectedAssetClasses === null) return;
@@ -101,7 +105,10 @@ export default function GroupsPage() {
         orderParam,
         assetClassesParam,
       ),
+    enabled: selectedAssetClasses !== null,
   });
+
+  const isGroupsLoading = selectedAssetClasses === null || isLoading;
 
   const recomputeMutation = useMutation({
     mutationFn: () => recomputeGroups(),
@@ -122,7 +129,8 @@ export default function GroupsPage() {
       {
         id: "rowNumber",
         header: "#",
-        cell: ({ row }) => pageOffset + row.index + 1,
+        cell: ({ row, table }) =>
+          ((table.options.meta as GroupsTableMeta | undefined)?.pageOffset ?? 0) + row.index + 1,
         enableSorting: false,
       },
       {
@@ -191,10 +199,10 @@ export default function GroupsPage() {
       },
 
     ],
-    [pageOffset]
+    []
   );
 
-  const table = useReactTable({
+  const table = useReactTable<TradeGroup>({
     data: data?.groups ?? [],
     columns,
     state: { sorting },
@@ -207,6 +215,7 @@ export default function GroupsPage() {
     },
     manualSorting: true,
     getCoreRowModel: getCoreRowModel(),
+    meta: { pageOffset },
   });
 
   return (
@@ -241,7 +250,7 @@ export default function GroupsPage() {
         </div>
       </div>
 
-      {isLoading && (
+      {isGroupsLoading && (
         <div className="text-center py-8 text-gray-400">Loading...</div>
       )}
 
