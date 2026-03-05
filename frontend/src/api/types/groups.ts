@@ -49,6 +49,7 @@ export type TradeRole = "entry" | "add" | "trim" | "exit";
 
 export interface MarkerData {
   time: number;
+  price: number;
   position: MarkerPosition;
   color: string;
   shape: MarkerShape;

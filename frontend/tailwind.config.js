@@ -7,6 +7,20 @@ export default {
         profit: "#22c55e",
         loss: "#ef4444",
       },
+      keyframes: {
+        fadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        scaleIn: {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+      },
+      animation: {
+        fadeIn: "fadeIn 150ms ease-out",
+        scaleIn: "scaleIn 200ms ease-out",
+      },
     },
   },
   plugins: [],

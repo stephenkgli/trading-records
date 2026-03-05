@@ -236,7 +236,6 @@ def build_markers(
         List of marker dicts sorted by trade execution time.
     """
     colors = ROLE_COLORS_LONG if direction == "long" else ROLE_COLORS_SHORT
-    sorted_bar_times = bar_times or []
     markers: list[dict] = []
 
     for leg in sorted(legs, key=lambda lg: lg.trade.executed_at):
@@ -253,17 +252,18 @@ def build_markers(
         color = colors.get(leg.role, "#9ca3af")
 
         raw_ts = int(trade.executed_at.timestamp())
-        snapped_ts = _snap_to_bar(raw_ts, sorted_bar_times)
+        snapped_ts = _snap_to_bar(raw_ts, bar_times or [])
 
         qty = _format_decimal(trade.quantity)
         px = _format_decimal(trade.price)
         markers.append(
             {
                 "time": snapped_ts,
+                "price": float(trade.price),
                 "position": position,
                 "color": color,
                 "shape": shape,
-                "text": f"{leg.role.upper()} {qty} @ {px}",
+                "text": qty,
                 "role": leg.role,
                 "trade_id": str(trade.id),
             }

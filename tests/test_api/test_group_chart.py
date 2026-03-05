@@ -11,6 +11,7 @@ Tests:
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -29,21 +30,33 @@ _BASE_TIME = datetime.now(timezone.utc) - timedelta(hours=3)
 # ---------------------------------------------------------------------------
 
 
-def _seed_closed_long_group(db_session) -> uuid.UUID:
-    """Seed a closed long group with entry and exit trades. Return group id."""
+def _seed_closed_group(
+    db_session,
+    *,
+    symbol: str = "AAPL",
+    direction: str = "long",
+    entry_price: Decimal = Decimal("182.55"),
+    exit_price: Decimal = Decimal("183.10"),
+    realized_pnl: Decimal = Decimal("55.00"),
+    quantity: Decimal = Decimal("100"),
+    hold_hours: float = 1.33,
+) -> uuid.UUID:
+    """Seed a closed group with entry and exit trades. Return group id."""
+    entry_side = "buy" if direction == "long" else "sell"
+    exit_side = "sell" if direction == "long" else "buy"
     opened_at = _BASE_TIME
-    closed_at = _BASE_TIME + timedelta(hours=1, minutes=20)
+    closed_at = _BASE_TIME + timedelta(hours=hold_hours)
 
     entry_trade = Trade(
         id=uuid.uuid4(),
         broker="ibkr",
-        broker_exec_id=f"CHART-ENTRY-{uuid.uuid4().hex[:8]}",
+        broker_exec_id=f"CHART-{direction.upper()}-ENTRY-{uuid.uuid4().hex[:8]}",
         account_id="U1234567",
-        symbol="AAPL",
+        symbol=symbol,
         asset_class="stock",
-        side="buy",
-        quantity=Decimal("100"),
-        price=Decimal("182.55"),
+        side=entry_side,
+        quantity=quantity,
+        price=entry_price,
         commission=Decimal("1.00"),
         executed_at=opened_at,
         currency="USD",
@@ -52,13 +65,13 @@ def _seed_closed_long_group(db_session) -> uuid.UUID:
     exit_trade = Trade(
         id=uuid.uuid4(),
         broker="ibkr",
-        broker_exec_id=f"CHART-EXIT-{uuid.uuid4().hex[:8]}",
+        broker_exec_id=f"CHART-{direction.upper()}-EXIT-{uuid.uuid4().hex[:8]}",
         account_id="U1234567",
-        symbol="AAPL",
+        symbol=symbol,
         asset_class="stock",
-        side="sell",
-        quantity=Decimal("100"),
-        price=Decimal("183.10"),
+        side=exit_side,
+        quantity=quantity,
+        price=exit_price,
         commission=Decimal("1.00"),
         executed_at=closed_at,
         currency="USD",
@@ -70,81 +83,11 @@ def _seed_closed_long_group(db_session) -> uuid.UUID:
     group = TradeGroup(
         id=uuid.uuid4(),
         account_id="U1234567",
-        symbol="AAPL",
+        symbol=symbol,
         asset_class="stock",
-        direction="long",
+        direction=direction,
         status="closed",
-        realized_pnl=Decimal("55.00"),
-        opened_at=opened_at,
-        closed_at=closed_at,
-    )
-    db_session.add(group)
-    db_session.flush()
-
-    entry_leg = TradeGroupLeg(
-        id=uuid.uuid4(),
-        trade_group_id=group.id,
-        trade_id=entry_trade.id,
-        role="entry",
-    )
-    exit_leg = TradeGroupLeg(
-        id=uuid.uuid4(),
-        trade_group_id=group.id,
-        trade_id=exit_trade.id,
-        role="exit",
-    )
-    db_session.add_all([entry_leg, exit_leg])
-    db_session.flush()
-
-    return group.id
-
-
-def _seed_closed_short_group(db_session) -> uuid.UUID:
-    """Seed a closed short group with entry (sell) and exit (buy) trades."""
-    opened_at = _BASE_TIME
-    closed_at = _BASE_TIME + timedelta(hours=4)
-
-    entry_trade = Trade(
-        id=uuid.uuid4(),
-        broker="ibkr",
-        broker_exec_id=f"CHART-SHORT-ENTRY-{uuid.uuid4().hex[:8]}",
-        account_id="U1234567",
-        symbol="TSLA",
-        asset_class="stock",
-        side="sell",
-        quantity=Decimal("50"),
-        price=Decimal("200.00"),
-        commission=Decimal("1.00"),
-        executed_at=opened_at,
-        currency="USD",
-        raw_data={},
-    )
-    exit_trade = Trade(
-        id=uuid.uuid4(),
-        broker="ibkr",
-        broker_exec_id=f"CHART-SHORT-EXIT-{uuid.uuid4().hex[:8]}",
-        account_id="U1234567",
-        symbol="TSLA",
-        asset_class="stock",
-        side="buy",
-        quantity=Decimal("50"),
-        price=Decimal("190.00"),
-        commission=Decimal("1.00"),
-        executed_at=closed_at,
-        currency="USD",
-        raw_data={},
-    )
-    db_session.add_all([entry_trade, exit_trade])
-    db_session.flush()
-
-    group = TradeGroup(
-        id=uuid.uuid4(),
-        account_id="U1234567",
-        symbol="TSLA",
-        asset_class="stock",
-        direction="short",
-        status="closed",
-        realized_pnl=Decimal("500.00"),
+        realized_pnl=realized_pnl,
         opened_at=opened_at,
         closed_at=closed_at,
     )
@@ -191,34 +134,25 @@ def _mock_candles() -> list[OHLCVBar]:
     ]
 
 
+@contextmanager
 def _patch_yfinance_provider():
-    """Return a combined patch context manager that mocks the cache and provider.
+    """Mock the cache (miss) and provider for chart endpoint tests.
 
-    The endpoint now uses OHLCVCacheService + _get_provider instead of
-    YFinanceProvider directly. We mock the cache to return None (cache miss)
-    and the provider to return ``_mock_candles()``.
+    The endpoint uses OHLCVCacheService + _get_provider. We mock the cache
+    to return None (cache miss) and the provider to return ``_mock_candles()``.
     """
-    mock_provider_instance = MagicMock()
-    mock_provider_instance.fetch_ohlcv.return_value = _mock_candles()
-    mock_provider_instance.__class__.__name__ = "TiingoProvider"
+    mock_provider = MagicMock()
+    mock_provider.fetch_ohlcv.return_value = _mock_candles()
+    mock_provider.__class__.__name__ = "TiingoProvider"
 
-    class _PatchContext:
-        def __enter__(self):
-            self._cache_patcher = patch("backend.api.groups.OHLCVCacheService")
-            self._provider_patcher = patch("backend.api.groups._get_provider")
-            mock_cache_cls = self._cache_patcher.start()
-            mock_get_provider = self._provider_patcher.start()
-            mock_cache_instance = MagicMock()
-            mock_cache_instance.get.return_value = None  # cache miss
-            mock_cache_cls.return_value = mock_cache_instance
-            mock_get_provider.return_value = mock_provider_instance
-            return self
-
-        def __exit__(self, *args):
-            self._provider_patcher.stop()
-            self._cache_patcher.stop()
-
-    return _PatchContext()
+    with (
+        patch("backend.api.groups.OHLCVCacheService") as mock_cache_cls,
+        patch(
+            "backend.api.groups._get_provider", return_value=mock_provider
+        ),
+    ):
+        mock_cache_cls.return_value.get.return_value = None  # cache miss
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +175,7 @@ class TestGroupChartSuccess:
 
     def test_chart_endpoint_returns_data(self, client, db_session):
         """Seeded closed group with mocked market data should return full chart response."""
-        group_id = _seed_closed_long_group(db_session)
+        group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
@@ -274,7 +208,7 @@ class TestGroupChartSuccess:
 
     def test_chart_markers_long_direction(self, client, db_session):
         """Long group should have entry (belowBar/arrowUp) and exit (aboveBar/arrowDown) markers."""
-        group_id = _seed_closed_long_group(db_session)
+        group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
@@ -290,12 +224,23 @@ class TestGroupChartSuccess:
 
         assert entry_marker["position"] == "belowBar"
         assert entry_marker["shape"] == "arrowUp"
+        assert entry_marker["price"] == 182.55
         assert exit_marker["position"] == "aboveBar"
-        assert exit_marker["shape"] == "arrowDown"
+        assert exit_marker["shape"] == "arrowDown"  # sell -> arrowDown
+        assert exit_marker["price"] == 183.10
 
     def test_chart_markers_short_direction(self, client, db_session):
         """Short group should have reversed marker positions."""
-        group_id = _seed_closed_short_group(db_session)
+        group_id = _seed_closed_group(
+            db_session,
+            symbol="TSLA",
+            direction="short",
+            entry_price=Decimal("200.00"),
+            exit_price=Decimal("190.00"),
+            realized_pnl=Decimal("500.00"),
+            quantity=Decimal("50"),
+            hold_hours=4,
+        )
 
         with _patch_yfinance_provider():
             resp = client.get(
@@ -312,8 +257,10 @@ class TestGroupChartSuccess:
         # Short: entry (sell) -> belowBar/arrowDown, exit (buy) -> aboveBar/arrowUp
         assert entry_marker["position"] == "belowBar"
         assert entry_marker["shape"] == "arrowDown"
+        assert entry_marker["price"] == 200.0
         assert exit_marker["position"] == "aboveBar"
-        assert exit_marker["shape"] == "arrowUp"
+        assert exit_marker["shape"] == "arrowUp"  # buy -> arrowUp
+        assert exit_marker["price"] == 190.0
 
 
 class TestGroupChartParams:
@@ -321,7 +268,7 @@ class TestGroupChartParams:
 
     def test_chart_with_custom_interval(self, client, db_session):
         """Explicit interval param should be used instead of auto-detection."""
-        group_id = _seed_closed_long_group(db_session)
+        group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
@@ -334,7 +281,7 @@ class TestGroupChartParams:
 
     def test_chart_with_custom_padding(self, client, db_session):
         """Custom padding param should be accepted without error."""
-        group_id = _seed_closed_long_group(db_session)
+        group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(
@@ -345,7 +292,7 @@ class TestGroupChartParams:
 
     def test_chart_auto_interval_selection(self, client, db_session):
         """Without explicit interval, stock groups should auto-select '1d'."""
-        group_id = _seed_closed_long_group(db_session)
+        group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
             resp = client.get(

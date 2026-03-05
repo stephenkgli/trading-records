@@ -84,7 +84,8 @@ class TestBuildMarkersLong:
         assert m["position"] == "belowBar"
         assert m["shape"] == "arrowUp"
         assert m["role"] == "entry"
-        assert "ENTRY" in m["text"]
+        assert m["text"] == "100"
+        assert m["price"] == 185.50
 
     def test_exit_marker_long(self):
         leg = _make_leg(side="sell", role="exit")
@@ -93,9 +94,10 @@ class TestBuildMarkersLong:
         assert len(markers) == 1
         m = markers[0]
         assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowDown"
+        assert m["shape"] == "arrowDown"  # sell -> arrowDown
         assert m["role"] == "exit"
-        assert "EXIT" in m["text"]
+        assert m["text"] == "100"
+        assert m["price"] == 185.50
 
     def test_add_marker_long(self):
         leg = _make_leg(side="buy", role="add")
@@ -106,7 +108,7 @@ class TestBuildMarkersLong:
         assert m["position"] == "belowBar"
         assert m["shape"] == "arrowUp"
         assert m["role"] == "add"
-        assert "ADD" in m["text"]
+        assert m["text"] == "100"
 
     def test_trim_marker_long(self):
         leg = _make_leg(side="sell", role="trim")
@@ -115,11 +117,10 @@ class TestBuildMarkersLong:
         assert len(markers) == 1
         m = markers[0]
         assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowDown"
-        assert m["role"] == "trim"
-        assert "TRIM" in m["text"]
+        assert m["shape"] == "arrowDown"  # sell -> arrowDown
+        assert m["text"] == "100"
 
-    def test_marker_text_contains_quantity_and_price(self):
+    def test_marker_text_contains_only_quantity(self):
         leg = _make_leg(
             side="buy",
             role="entry",
@@ -127,8 +128,8 @@ class TestBuildMarkersLong:
             price=Decimal("182.55"),
         )
         markers = build_markers([leg], direction="long")
-        assert "50" in markers[0]["text"]
-        assert "182.55" in markers[0]["text"]
+        assert markers[0]["text"] == "50"
+        assert markers[0]["price"] == 182.55
 
     def test_marker_has_trade_id(self):
         leg = _make_leg(side="buy", role="entry")
@@ -153,7 +154,7 @@ class TestBuildMarkersShort:
         assert len(markers) == 1
         m = markers[0]
         assert m["position"] == "belowBar"
-        assert m["shape"] == "arrowDown"
+        assert m["shape"] == "arrowDown"  # sell -> arrowDown
         assert m["role"] == "entry"
 
     def test_exit_marker_short(self):
@@ -163,7 +164,7 @@ class TestBuildMarkersShort:
         assert len(markers) == 1
         m = markers[0]
         assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowUp"
+        assert m["shape"] == "arrowUp"  # buy -> arrowUp
         assert m["role"] == "exit"
 
 
@@ -206,7 +207,7 @@ class TestBuildMarkersTextFormatting:
             price=Decimal("182.55"),
         )
         markers = build_markers([leg], direction="long")
-        assert markers[0]["text"] == "ENTRY 1 @ 182.55"
+        assert markers[0]["text"] == "1"
 
     def test_trailing_zeros_stripped_from_price(self):
         leg = _make_leg(
@@ -216,7 +217,7 @@ class TestBuildMarkersTextFormatting:
             price=Decimal("182.55000000"),
         )
         markers = build_markers([leg], direction="long")
-        assert markers[0]["text"] == "ENTRY 100 @ 182.55"
+        assert markers[0]["text"] == "100"
 
     def test_integer_values_no_decimal_point(self):
         leg = _make_leg(
@@ -226,7 +227,7 @@ class TestBuildMarkersTextFormatting:
             price=Decimal("200.00000000"),
         )
         markers = build_markers([leg], direction="long")
-        assert markers[0]["text"] == "EXIT 50 @ 200"
+        assert markers[0]["text"] == "50"
 
     def test_fractional_values_preserved(self):
         leg = _make_leg(
@@ -236,7 +237,7 @@ class TestBuildMarkersTextFormatting:
             price=Decimal("3.14159"),
         )
         markers = build_markers([leg], direction="long")
-        assert markers[0]["text"] == "ENTRY 0.5 @ 3.14159"
+        assert markers[0]["text"] == "0.5"
 
 
 # ===========================================================================

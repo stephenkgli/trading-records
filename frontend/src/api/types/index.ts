@@ -23,6 +23,8 @@ export type {
   TradeGroupListResponse,
   CandleData,
   MarkerData,
+  MarkerPosition,
+  MarkerShape,
   GroupChartSummary,
   GroupChartData,
 } from "./groups";

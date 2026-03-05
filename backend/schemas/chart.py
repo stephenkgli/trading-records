@@ -16,9 +16,14 @@ TradeRole = Literal["entry", "add", "trim", "exit"]
 
 
 class MarkerData(BaseModel):
-    """A single trade marker for lightweight-charts ``setMarkers()``."""
+    """A single trade marker rendered on the K-line chart.
+
+    Contains timestamp, execution price, visual hints (position, color, shape),
+    descriptive text, the trade role, and the originating trade ID.
+    """
 
     time: int
+    price: float
     position: MarkerPosition
     color: str
     shape: MarkerShape
