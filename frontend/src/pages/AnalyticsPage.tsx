@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBySymbol, fetchPerformance, fetchDailySummaries, fetchAvailableAssetClasses } from "../api/client";
 import EquityCurve from "../components/EquityCurve";
@@ -91,6 +91,44 @@ export default function AnalyticsPage() {
     queryFn: () => fetchDailySummaries(dateRange.from, dateRange.to, assetClassesParam),
   });
 
+  const stats = useMemo(() => {
+    if (!metrics) return [];
+
+    return [
+      {
+        label: "Net P&L",
+        value: `$${Number(metrics.net_pnl).toFixed(2)}`,
+        color: Number(metrics.net_pnl) >= 0 ? "green" : "red",
+      },
+      { label: "Total Trades", value: String(metrics.total_trades) },
+      {
+        label: "Win Rate",
+        value: `${metrics.win_rate}%`,
+        color: metrics.win_rate >= 50 ? "green" : "red",
+      },
+      {
+        label: "Win/Loss Ratio",
+        value: metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A",
+      },
+      {
+        label: "Avg Win",
+        value: `$${Number(metrics.avg_win).toFixed(2)}`,
+        color: "green",
+      },
+      {
+        label: "Avg Loss",
+        value: `$${Number(metrics.avg_loss).toFixed(2)}`,
+        color: "red",
+      },
+      {
+        label: "Expectancy",
+        value: `$${Number(metrics.expectancy).toFixed(2)}`,
+        color: Number(metrics.expectancy) >= 0 ? "green" : "red",
+      },
+      { label: "Trading Days", value: String(metrics.trading_days) },
+    ];
+  }, [metrics]);
+
   const handleAssetClassChange = useCallback((acs: string[]) => {
     setSelectedAssetClasses(acs);
   }, []);
@@ -114,17 +152,14 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-medium mb-4">Performance Metrics</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
-            <Stat label="Net P&L" value={`$${Number(metrics.net_pnl).toFixed(2)}`}
-              color={Number(metrics.net_pnl) >= 0 ? "green" : "red"} />
-            <Stat label="Total Trades" value={String(metrics.total_trades)} />
-            <Stat label="Win Rate" value={`${metrics.win_rate}%`}
-              color={metrics.win_rate >= 50 ? "green" : "red"} />
-            <Stat label="Win/Loss Ratio" value={metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A"} />
-            <Stat label="Avg Win" value={`$${Number(metrics.avg_win).toFixed(2)}`} color="green" />
-            <Stat label="Avg Loss" value={`$${Number(metrics.avg_loss).toFixed(2)}`} color="red" />
-            <Stat label="Expectancy" value={`$${Number(metrics.expectancy).toFixed(2)}`}
-              color={Number(metrics.expectancy) >= 0 ? "green" : "red"} />
-            <Stat label="Trading Days" value={String(metrics.trading_days)} />
+            {stats.map((stat) => (
+              <Stat
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                color={stat.color}
+              />
+            ))}
           </div>
         </div>
       )}

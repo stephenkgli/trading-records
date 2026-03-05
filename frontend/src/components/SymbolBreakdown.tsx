@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -15,11 +16,15 @@ interface SymbolBreakdownProps {
 }
 
 export default function SymbolBreakdown({ data }: SymbolBreakdownProps) {
-  const chartData = data.map((d) => ({
-    symbol: d.symbol,
-    pnl: Number(d.net_pnl),
-    trades: d.trade_count,
-  }));
+  const chartData = useMemo(
+    () =>
+      data.map((d) => ({
+        symbol: d.symbol,
+        pnl: Number(d.net_pnl),
+        trades: d.trade_count,
+      })),
+    [data],
+  );
 
   if (chartData.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-8">No data available</p>;

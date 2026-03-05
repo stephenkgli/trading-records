@@ -89,7 +89,7 @@ export default function PnLCalendar() {
 
           return (
             <div
-              key={cell.day}
+              key={`day-${year}-${month}-${cell.day}`}
               className={`${bgColor} rounded p-1 min-h-[40px] flex flex-col items-center justify-center`}
               title={hasData ? `$${pnl.toFixed(2)} (${cell.entry!.trade_count} trades)` : ""}
             >

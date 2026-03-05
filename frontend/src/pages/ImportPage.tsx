@@ -190,7 +190,6 @@ export default function ImportPage() {
     mutationFn: uploadCsv,
     onSuccess: (result) => {
       setLastResult(result);
-      queryClient.invalidateQueries({ queryKey: ["trades"] });
       queryClient.invalidateQueries({ queryKey: ["importLogs"] });
     },
   });

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { PerformanceMetrics } from "../api/client";
 
 interface MetricsCardsProps {
@@ -5,28 +6,37 @@ interface MetricsCardsProps {
 }
 
 export default function MetricsCards({ metrics }: MetricsCardsProps) {
-  const cards = [
-    {
-      label: "Net P&L",
-      value: `$${Number(metrics.net_pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      color: Number(metrics.net_pnl) >= 0 ? "text-green-600" : "text-red-600",
-    },
-    {
-      label: "Win Rate",
-      value: `${metrics.win_rate}%`,
-      color: metrics.win_rate >= 50 ? "text-green-600" : "text-red-600",
-    },
-    {
-label: "Win/Loss Ratio",
-      value: metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A",
-      color: metrics.win_loss_ratio !== null && metrics.win_loss_ratio >= 1 ? "text-green-600" : "text-red-600",
-    },
-    {
-      label: "Total Trades",
-      value: String(metrics.total_trades),
-      color: "text-gray-900",
-    },
-  ];
+  const cards = useMemo(
+    () => [
+      {
+        label: "Net P&L",
+        value: `$${Number(metrics.net_pnl).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
+        color: Number(metrics.net_pnl) >= 0 ? "text-green-600" : "text-red-600",
+      },
+      {
+        label: "Win Rate",
+        value: `${metrics.win_rate}%`,
+        color: metrics.win_rate >= 50 ? "text-green-600" : "text-red-600",
+      },
+      {
+        label: "Win/Loss Ratio",
+        value: metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A",
+        color:
+          metrics.win_loss_ratio !== null && metrics.win_loss_ratio >= 1
+            ? "text-green-600"
+            : "text-red-600",
+      },
+      {
+        label: "Total Trades",
+        value: String(metrics.total_trades),
+        color: "text-gray-900",
+      },
+    ],
+    [metrics.net_pnl, metrics.win_rate, metrics.win_loss_ratio, metrics.total_trades],
+  );
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

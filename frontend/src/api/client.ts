@@ -3,6 +3,7 @@
  */
 
 import {
+  applyAssetClassParams,
   getApiBase,
   getHeaders,
   getUploadHeaders,
@@ -142,18 +143,6 @@ export interface TradeGroupListResponse {
   total: number;
   page: number;
   per_page: number;
-}
-
-function applyAssetClassParams(
-  params: URLSearchParams,
-  assetClasses?: string[],
-): void {
-  if (assetClasses === undefined) return;
-  if (assetClasses.length > 0) {
-    params.set("asset_classes", assetClasses.join(","));
-  } else {
-    params.set("asset_classes", "");
-  }
 }
 
 export async function fetchGroups(

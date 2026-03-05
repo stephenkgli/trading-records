@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import {
   fetchGroups,
   recomputeGroups,
@@ -14,9 +14,10 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
-import TradeChartModal from "../components/TradeChartModal";
 import AssetClassFilter from "../components/AssetClassFilter";
 import { formatDateTime } from "../utils/date";
+
+const TradeChartModal = lazy(() => import("../components/TradeChartModal"));
 
 const STORAGE_KEY = "groups_asset_class_filter";
 
@@ -333,10 +334,12 @@ export default function GroupsPage() {
       )}
 
       {selectedGroupId && (
-        <TradeChartModal
-          groupId={selectedGroupId}
-          onClose={() => setSelectedGroupId(null)}
-        />
+        <Suspense fallback={<div className="text-sm text-gray-400">Loading chart...</div>}>
+          <TradeChartModal
+            groupId={selectedGroupId}
+            onClose={() => setSelectedGroupId(null)}
+          />
+        </Suspense>
       )}
     </div>
   );

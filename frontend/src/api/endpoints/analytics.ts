@@ -5,33 +5,18 @@
  * Calendar and asset-class list keep explicit functions due to different parameters.
  */
 
-import { getApiBase, getHeaders, handleResponse } from "./http";
+import {
+  applyAssetClassParams,
+  getApiBase,
+  getHeaders,
+  handleResponse,
+} from "./http";
 import type {
   DailySummary,
   CalendarEntry,
   SymbolBreakdown,
   PerformanceMetrics,
 } from "../types";
-
-/**
- * Append `asset_classes` to the given URLSearchParams.
- *
- * Semantics match the backend contract:
- * - `undefined`  -> param omitted, backend returns all asset classes
- * - `[]`         -> param set to empty string, backend returns empty results
- * - `[...items]` -> param set to comma-joined values
- */
-function applyAssetClassParams(
-  params: URLSearchParams,
-  assetClasses?: string[],
-): void {
-  if (assetClasses === undefined) return;
-  if (assetClasses.length > 0) {
-    params.set("asset_classes", assetClasses.join(","));
-  } else {
-    params.set("asset_classes", "");
-  }
-}
 
 // -- Generic date-range fetcher factory --
 
