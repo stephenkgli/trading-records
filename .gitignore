@@ -67,6 +67,7 @@ chats/
 .claude/
 .codex/
 .codebuddy/
+.agents/
 
 # Docs
 workspace/
