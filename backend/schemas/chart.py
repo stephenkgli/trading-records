@@ -10,23 +10,20 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-MarkerPosition = Literal["aboveBar", "belowBar", "inBar"]
-MarkerShape = Literal["arrowUp", "arrowDown", "circle", "square"]
 TradeRole = Literal["entry", "add", "trim", "exit"]
+TradeSide = Literal["buy", "sell"]
 
 
 class MarkerData(BaseModel):
     """A single trade marker rendered on the K-line chart.
 
-    Contains timestamp, execution price, visual hints (position, color, shape),
-    descriptive text, the trade role, and the originating trade ID.
+    Contains timestamp, execution price, side, descriptive text,
+    the trade role, and the originating trade ID.
     """
 
     time: int
     price: float
-    position: MarkerPosition
-    color: str
-    shape: MarkerShape
+    side: TradeSide
     text: str
     role: TradeRole
     trade_id: uuid.UUID

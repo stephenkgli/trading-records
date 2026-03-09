@@ -1,52 +1,199 @@
 /**
- * tradeMarkers — custom overlay for rendering trade entry/exit markers
+ * tradeMarkers — custom overlay for rendering trade markers
  * on a KLineChart at exact (timestamp, price) coordinates.
- *
- * Registers a `tradeMarker` overlay type that draws a small filled
- * triangle and a compact text label offset from the trade's execution
- * price. Entry/add markers sit below the candle; trim/exit markers sit
- * above. Triangle direction follows the buy/sell action: ▲ for buy,
- * ▼ for sell (independent of position).
  */
 
 import { registerOverlay, type Chart } from "klinecharts";
-import type { MarkerData, MarkerPosition, MarkerShape } from "../../api/types";
+import type { CandleData, MarkerData, MarkerSide, TradeRole } from "../../api/types";
+import { layoutTradeMarkers } from "./markerLayout";
 
 /** Triangle half-width and height in pixels. */
 const TRI_HALF = 6;
 const TRI_HEIGHT = 10;
 
-/**
- * Vertical offset (px) from the price coordinate to push the marker
- * away from the candle body, reducing overlap.
- */
-const PRICE_OFFSET = 12;
-
-/** Vertical gap between triangle base and text label. */
+/** Geometry constants for marker layout. */
+const BASE_OFFSET = 8;
+const LANE_GAP = 14;
 const LABEL_GAP = 4;
+const LABEL_BOX_HEIGHT = 16;
+const EDGE_MARGIN = 6;
+const TOTAL_STACK_HEIGHT = TRI_HEIGHT + LABEL_GAP + LABEL_BOX_HEIGHT;
 
 /** Colour map for trade roles (optimised for dark background). */
-const ROLE_COLORS: Record<string, string> = {
+const ROLE_COLORS: Record<TradeRole, string> = {
   entry: "#3b82f6", // blue — open position
   add: "#06b6d4", // cyan — add to position
   trim: "#f59e0b", // amber — reduce position
-  exit: "#e879f9", // fuchsia — close position (avoids red/down confusion)
+  exit: "#e879f9", // fuchsia — close position
 };
 
-/**
- * Register the `tradeMarker` overlay type with KLineChart.
- * Must be called once before creating any trade marker overlays.
- *
- * The overlay expects `extendData` to be a `MarkerExtendData` object:
- * ```
- * { text: string; position: "aboveBar" | "belowBar"; color: string; shape: "arrowUp" | "arrowDown" }
- * ```
- */
+type Placement = "above" | "below";
+
 interface MarkerExtendData {
   text: string;
-  position: MarkerPosition;
   color: string;
-  shape: MarkerShape;
+  side: MarkerSide;
+  lane: number;
+  barOpen: number;
+  barClose: number;
+}
+
+interface MarkerGeometryInput {
+  side: MarkerSide;
+  lane: number;
+  priceY: number;
+  bodyTopY: number;
+  bodyBottomY: number;
+  paneTop: number;
+  paneBottom: number;
+}
+
+interface PaneBounds {
+  top: number;
+  bottom: number;
+}
+
+interface MarkerGeometry {
+  placement: Placement;
+  sign: 1 | -1;
+  anchorY: number;
+  textBaseline: "top" | "bottom";
+}
+
+function oppositePlacement(placement: Placement): Placement {
+  return placement === "below" ? "above" : "below";
+}
+
+function placementForSide(side: MarkerSide): Placement {
+  return side === "buy" ? "below" : "above";
+}
+
+function buildGeometry(
+  placement: Placement,
+  lane: number,
+  priceY: number,
+  bodyTopY: number,
+  bodyBottomY: number,
+): MarkerGeometry {
+  const sign: 1 | -1 = placement === "below" ? 1 : -1;
+  const offset = BASE_OFFSET + lane * LANE_GAP;
+  let anchorY: number;
+  if (placement === "below") {
+    // Prefer staying close to execution price, but never overlap candle body.
+    anchorY = Math.max(priceY + offset, bodyBottomY + offset);
+  } else {
+    // Prefer staying close to execution price, but never overlap candle body.
+    anchorY = Math.min(priceY - offset, bodyTopY - offset);
+  }
+  return {
+    placement,
+    sign,
+    anchorY,
+    textBaseline: placement === "below" ? "top" : "bottom",
+  };
+}
+
+function getBounds(placement: Placement, anchorY: number): { top: number; bottom: number } {
+  if (placement === "below") {
+    return {
+      top: anchorY,
+      bottom: anchorY + TOTAL_STACK_HEIGHT,
+    };
+  }
+  return {
+    top: anchorY - TOTAL_STACK_HEIGHT,
+    bottom: anchorY,
+  };
+}
+
+function fitsInPane(
+  geometry: MarkerGeometry,
+  paneTop: number,
+  paneBottom: number,
+): boolean {
+  const bounds = getBounds(geometry.placement, geometry.anchorY);
+  return bounds.top >= paneTop + EDGE_MARGIN && bounds.bottom <= paneBottom - EDGE_MARGIN;
+}
+
+function clampAnchor(placement: Placement, anchorY: number, paneTop: number, paneBottom: number): number {
+  let min: number;
+  let max: number;
+  if (placement === "below") {
+    min = paneTop + EDGE_MARGIN;
+    max = paneBottom - EDGE_MARGIN - TOTAL_STACK_HEIGHT;
+  } else {
+    min = paneTop + EDGE_MARGIN + TOTAL_STACK_HEIGHT;
+    max = paneBottom - EDGE_MARGIN;
+  }
+
+  if (min > max) {
+    return (min + max) / 2;
+  }
+  return Math.min(Math.max(anchorY, min), max);
+}
+
+function toFinite(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * KLineChart overlay callbacks may provide `coordinates.y` in pane-local
+ * coordinates while `bounding.top/bottom` can be absolute canvas offsets.
+ * Infer the correct pane bounds in the same coordinate system as y values.
+ */
+export function resolvePaneBounds(samples: number[], bounding: { top: number; bottom: number; height: number }): PaneBounds {
+  const EPS = 1;
+  const localCount = samples.filter((y) => y >= -EPS && y <= bounding.height + EPS).length;
+  const absoluteCount = samples.filter(
+    (y) => y >= bounding.top - EPS && y <= bounding.bottom + EPS,
+  ).length;
+  const maxY = Math.max(...samples);
+  const minY = Math.min(...samples);
+
+  if (localCount === samples.length && minY >= -EPS && maxY <= bounding.height + EPS) {
+    return { top: 0, bottom: bounding.height };
+  }
+  if (absoluteCount === samples.length) {
+    return { top: bounding.top, bottom: bounding.bottom };
+  }
+  if (localCount >= absoluteCount) {
+    return { top: 0, bottom: bounding.height };
+  }
+  return { top: bounding.top, bottom: bounding.bottom };
+}
+
+export function resolveMarkerGeometry(input: MarkerGeometryInput): MarkerGeometry {
+  const preferred = buildGeometry(
+    placementForSide(input.side),
+    input.lane,
+    input.priceY,
+    input.bodyTopY,
+    input.bodyBottomY,
+  );
+  if (fitsInPane(preferred, input.paneTop, input.paneBottom)) {
+    return preferred;
+  }
+
+  const flipped = buildGeometry(
+    oppositePlacement(preferred.placement),
+    input.lane,
+    input.priceY,
+    input.bodyTopY,
+    input.bodyBottomY,
+  );
+  if (fitsInPane(flipped, input.paneTop, input.paneBottom)) {
+    return flipped;
+  }
+
+  return {
+    ...flipped,
+    anchorY: clampAnchor(
+      flipped.placement,
+      flipped.anchorY,
+      input.paneTop,
+      input.paneBottom,
+    ),
+  };
 }
 
 let registered = false;
@@ -61,47 +208,57 @@ export function registerTradeMarkerOverlay(): void {
     needDefaultPointFigure: false,
     needDefaultXAxisFigure: false,
     needDefaultYAxisFigure: false,
-    createPointFigures: ({ overlay, coordinates }) => {
+    createPointFigures: ({ overlay, coordinates, yAxis, bounding }) => {
       if (coordinates.length === 0) return [];
 
       const x = coordinates[0].x;
-      const y = coordinates[0].y;
+      const priceY = coordinates[0].y;
       const ext = overlay.extendData as MarkerExtendData | undefined;
       if (!ext) return [];
 
-      const below = ext.position === "belowBar";
-      const upward = ext.shape === "arrowUp";
+      const pointValue = overlay.points[0]?.value;
+      const axisPriceYRaw = toFinite(
+        yAxis && typeof pointValue === "number"
+          ? yAxis.convertToPixel(pointValue)
+          : priceY,
+        priceY,
+      );
+      // Normalize axis-converted pixels to the same coordinate space as coordinates.y.
+      const axisDelta = priceY - axisPriceYRaw;
+      const openY = toFinite(
+        yAxis ? yAxis.convertToPixel(ext.barOpen) + axisDelta : priceY,
+        priceY,
+      );
+      const closeY = toFinite(
+        yAxis ? yAxis.convertToPixel(ext.barClose) + axisDelta : priceY,
+        priceY,
+      );
+      const bodyTopY = Math.min(openY, closeY);
+      const bodyBottomY = Math.max(openY, closeY);
+      const paneBounds = resolvePaneBounds([priceY, bodyTopY, bodyBottomY], bounding);
+
+      const geometry = resolveMarkerGeometry({
+        side: ext.side,
+        lane: ext.lane,
+        priceY,
+        bodyTopY,
+        bodyBottomY,
+        paneTop: paneBounds.top,
+        paneBottom: paneBounds.bottom,
+      });
+
+      const upward = ext.side === "buy";
       const color = ext.color;
-
-      // Canvas coordinate system: y increases downward.
-      //
-      // `position` controls vertical placement relative to candle:
-      //   belowBar → marker sits below the candle body
-      //   aboveBar → marker sits above the candle body
-      //
-      // `shape` controls triangle direction (buy/sell action):
-      //   arrowUp (▲)  → buy
-      //   arrowDown (▼) → sell
-
-      // sign: +1 pushes away from price downward (belowBar),
-      //        -1 pushes away upward (aboveBar)
-      const sign = below ? 1 : -1;
-      const anchorY = y + sign * PRICE_OFFSET;
-
-      // Triangle tip/base geometry.
-      // ▲ (arrowUp): tip at smallest Y (screen-top), base at largest Y.
-      // ▼ (arrowDown): tip at largest Y (screen-bottom), base at smallest Y.
-      const farY = anchorY + sign * TRI_HEIGHT;
-      const tipY = upward ? Math.min(anchorY, farY) : Math.max(anchorY, farY);
-      const baseY = upward ? Math.max(anchorY, farY) : Math.min(anchorY, farY);
+      const farY = geometry.anchorY + geometry.sign * TRI_HEIGHT;
+      const tipY = upward ? Math.min(geometry.anchorY, farY) : Math.max(geometry.anchorY, farY);
+      const baseY = upward ? Math.max(geometry.anchorY, farY) : Math.min(geometry.anchorY, farY);
       const triCoords = [
         { x, y: tipY },
         { x: x - TRI_HALF, y: baseY },
         { x: x + TRI_HALF, y: baseY },
       ];
 
-      const textY = anchorY + sign * (TRI_HEIGHT + LABEL_GAP);
-      const textBaseline = below ? "top" : "bottom";
+      const textY = geometry.anchorY + geometry.sign * (TRI_HEIGHT + LABEL_GAP);
 
       return [
         {
@@ -122,7 +279,7 @@ export function registerTradeMarkerOverlay(): void {
             y: textY,
             text: ext.text,
             align: "center",
-            baseline: textBaseline,
+            baseline: geometry.textBaseline,
           },
           styles: {
             color: "#ffffff",
@@ -144,7 +301,7 @@ export function registerTradeMarkerOverlay(): void {
 }
 
 /**
- * Render trade entry/exit markers as locked KLineChart overlays.
+ * Render trade markers as locked KLineChart overlays.
  *
  * All markers share `groupId: "trade-markers"` so they can be
  * bulk-removed without touching user-drawn overlays.
@@ -152,10 +309,12 @@ export function registerTradeMarkerOverlay(): void {
 export function createTradeMarkers(
   chart: Chart,
   markers: MarkerData[],
+  candles: CandleData[],
 ): void {
   registerTradeMarkerOverlay();
+  const laidOut = layoutTradeMarkers(markers, candles);
 
-  for (const m of markers) {
+  for (const m of laidOut) {
     const timestampMs = m.time * 1000;
     const color = ROLE_COLORS[m.role] ?? "#6b7280";
 
@@ -167,9 +326,11 @@ export function createTradeMarkers(
       points: [{ timestamp: timestampMs, value: m.price }],
       extendData: {
         text: m.text,
-        position: m.position,
         color,
-        shape: m.shape,
+        side: m.side,
+        lane: m.lane,
+        barOpen: m.barOpen,
+        barClose: m.barClose,
       } satisfies MarkerExtendData,
     });
   }

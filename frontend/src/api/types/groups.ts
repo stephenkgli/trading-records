@@ -51,16 +51,13 @@ export interface CandleData {
   volume: number;
 }
 
-export type MarkerPosition = "aboveBar" | "belowBar" | "inBar";
-export type MarkerShape = "arrowUp" | "arrowDown" | "circle" | "square";
+export type MarkerSide = "buy" | "sell";
 export type TradeRole = "entry" | "add" | "trim" | "exit";
 
 export interface MarkerData {
   time: number;
   price: number;
-  position: MarkerPosition;
-  color: string;
-  shape: MarkerShape;
+  side: MarkerSide;
   text: string;
   role: TradeRole;
   trade_id: string;

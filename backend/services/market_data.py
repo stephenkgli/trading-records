@@ -15,8 +15,6 @@ from typing import Protocol
 import structlog
 from pydantic import BaseModel
 
-from backend.utils.symbol import normalize_futures_symbol
-
 logger = structlog.get_logger(__name__)
 
 
@@ -44,25 +42,6 @@ ASSET_CLASS_INTERVALS: dict[str, str] = {
 def default_interval(asset_class: str) -> str:
     """Return the default K-line interval for a given asset class."""
     return ASSET_CLASS_INTERVALS.get(asset_class, "1d")
-
-
-# ---------------------------------------------------------------------------
-# Role color constants for trade markers (lightweight-charts format)
-# ---------------------------------------------------------------------------
-
-ROLE_COLORS_LONG: dict[str, str] = {
-    "entry": "#22c55e",
-    "add": "#86efac",
-    "trim": "#fca5a5",
-    "exit": "#ef4444",
-}
-
-ROLE_COLORS_SHORT: dict[str, str] = {
-    "entry": "#ef4444",
-    "add": "#fca5a5",
-    "trim": "#86efac",
-    "exit": "#22c55e",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -215,13 +194,12 @@ def _snap_to_bar(marker_ts: int, bar_times: list[int]) -> int:
 
 def build_markers(
     legs: list,  # list of TradeGroupLeg ORM objects (with .trade loaded)
-    direction: str,
     bar_times: list[int] | None = None,
 ) -> list[dict]:
     """Convert trade group legs into lightweight-charts marker dicts.
 
-    Each marker includes time, position, color, shape, text, role, and
-    trade_id fields ready for the frontend ``setMarkers()`` API.
+    Each marker includes time, price, side, text, role, and trade_id
+    fields ready for frontend marker layout and rendering.
 
     When ``bar_times`` is provided, each marker's time will be snapped
     to the candle bar it belongs to (the largest bar_time <= marker_time),
@@ -229,40 +207,26 @@ def build_markers(
 
     Args:
         legs: TradeGroupLeg objects with eagerly loaded ``.trade`` relationships.
-        direction: ``"long"`` or ``"short"``.
         bar_times: Sorted list of candle bar Unix timestamps (seconds).
 
     Returns:
         List of marker dicts sorted by trade execution time.
     """
-    colors = ROLE_COLORS_LONG if direction == "long" else ROLE_COLORS_SHORT
     markers: list[dict] = []
 
     for leg in sorted(legs, key=lambda lg: lg.trade.executed_at):
         trade = leg.trade
-        is_buy = trade.side == "buy"
-
-        shape = "arrowUp" if is_buy else "arrowDown"
-
-        if direction == "long":
-            position = "belowBar" if is_buy else "aboveBar"
-        else:
-            position = "aboveBar" if is_buy else "belowBar"
-
-        color = colors.get(leg.role, "#9ca3af")
+        side = "buy" if trade.side == "buy" else "sell"
 
         raw_ts = int(trade.executed_at.timestamp())
         snapped_ts = _snap_to_bar(raw_ts, bar_times or [])
 
         qty = _format_decimal(trade.quantity)
-        px = _format_decimal(trade.price)
         markers.append(
             {
                 "time": snapped_ts,
                 "price": float(trade.price),
-                "position": position,
-                "color": color,
-                "shape": shape,
+                "side": side,
                 "text": qty,
                 "role": leg.role,
                 "trade_id": str(trade.id),

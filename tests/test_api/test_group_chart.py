@@ -207,7 +207,7 @@ class TestGroupChartSuccess:
         assert data["symbol"] == "AAPL"
 
     def test_chart_markers_long_direction(self, client, db_session):
-        """Long group should have entry (belowBar/arrowUp) and exit (aboveBar/arrowDown) markers."""
+        """Long group markers should expose side semantics."""
         group_id = _seed_closed_group(db_session)
 
         with _patch_yfinance_provider():
@@ -222,15 +222,16 @@ class TestGroupChartSuccess:
         entry_marker = next(m for m in markers if m["role"] == "entry")
         exit_marker = next(m for m in markers if m["role"] == "exit")
 
-        assert entry_marker["position"] == "belowBar"
-        assert entry_marker["shape"] == "arrowUp"
+        assert entry_marker["side"] == "buy"
         assert entry_marker["price"] == 182.55
-        assert exit_marker["position"] == "aboveBar"
-        assert exit_marker["shape"] == "arrowDown"  # sell -> arrowDown
+        assert exit_marker["side"] == "sell"
         assert exit_marker["price"] == 183.10
+        assert "position" not in entry_marker
+        assert "shape" not in entry_marker
+        assert "color" not in entry_marker
 
     def test_chart_markers_short_direction(self, client, db_session):
-        """Short group should have reversed marker positions."""
+        """Short group markers should expose side semantics."""
         group_id = _seed_closed_group(
             db_session,
             symbol="TSLA",
@@ -254,12 +255,10 @@ class TestGroupChartSuccess:
         entry_marker = next(m for m in markers if m["role"] == "entry")
         exit_marker = next(m for m in markers if m["role"] == "exit")
 
-        # Short: entry (sell) -> belowBar/arrowDown, exit (buy) -> aboveBar/arrowUp
-        assert entry_marker["position"] == "belowBar"
-        assert entry_marker["shape"] == "arrowDown"
+        # Entry can be sell (short), exit can be buy (long).
+        assert entry_marker["side"] == "sell"
         assert entry_marker["price"] == 200.0
-        assert exit_marker["position"] == "aboveBar"
-        assert exit_marker["shape"] == "arrowUp"  # buy -> arrowUp
+        assert exit_marker["side"] == "buy"
         assert exit_marker["price"] == 190.0
 
 

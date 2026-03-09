@@ -251,7 +251,7 @@ export default function KLineChartView({
 
     // Render trade markers
     if (markersRef.current.length > 0) {
-      createTradeMarkers(chart, markersRef.current);
+      createTradeMarkers(chart, markersRef.current, candlesRef.current);
     }
 
     // Restore saved overlays
@@ -304,7 +304,7 @@ export default function KLineChartView({
 
     chart.removeOverlay({ groupId: "trade-markers" });
     if (markers.length > 0) {
-      createTradeMarkers(chart, markers);
+      createTradeMarkers(chart, markers, candles);
     }
   }, [candles, markers]);
 

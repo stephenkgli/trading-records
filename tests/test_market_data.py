@@ -3,7 +3,7 @@ Tests for market data service (backend/services/market_data.py).
 
 Tests:
 - default_interval() per asset class
-- build_markers() for long and short directions
+- build_markers() output semantics
 - Marker text formatting (trailing zeros)
 - Marker sorting by executed_at
 - compute_padded_range() end-time clamping
@@ -72,52 +72,48 @@ def _make_leg(
     return SimpleNamespace(role=role, trade=trade)
 
 
-class TestBuildMarkersLong:
-    """Test marker generation for long-direction groups."""
+class TestBuildMarkers:
+    """Test marker generation semantics."""
 
-    def test_entry_marker_long(self):
+    def test_entry_marker(self):
         leg = _make_leg(side="buy", role="entry")
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
 
         assert len(markers) == 1
         m = markers[0]
-        assert m["position"] == "belowBar"
-        assert m["shape"] == "arrowUp"
+        assert m["side"] == "buy"
         assert m["role"] == "entry"
         assert m["text"] == "100"
         assert m["price"] == 185.50
 
-    def test_exit_marker_long(self):
+    def test_exit_marker(self):
         leg = _make_leg(side="sell", role="exit")
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
 
         assert len(markers) == 1
         m = markers[0]
-        assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowDown"  # sell -> arrowDown
+        assert m["side"] == "sell"
         assert m["role"] == "exit"
         assert m["text"] == "100"
         assert m["price"] == 185.50
 
-    def test_add_marker_long(self):
+    def test_add_marker(self):
         leg = _make_leg(side="buy", role="add")
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
 
         assert len(markers) == 1
         m = markers[0]
-        assert m["position"] == "belowBar"
-        assert m["shape"] == "arrowUp"
+        assert m["side"] == "buy"
         assert m["role"] == "add"
         assert m["text"] == "100"
 
-    def test_trim_marker_long(self):
+    def test_trim_marker(self):
         leg = _make_leg(side="sell", role="trim")
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
 
         assert len(markers) == 1
         m = markers[0]
-        assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowDown"  # sell -> arrowDown
+        assert m["side"] == "sell"
         assert m["text"] == "100"
 
     def test_marker_text_contains_only_quantity(self):
@@ -127,45 +123,21 @@ class TestBuildMarkersLong:
             quantity=Decimal("50"),
             price=Decimal("182.55"),
         )
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["text"] == "50"
         assert markers[0]["price"] == 182.55
 
     def test_marker_has_trade_id(self):
         leg = _make_leg(side="buy", role="entry")
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert "trade_id" in markers[0]
         assert markers[0]["trade_id"] == str(leg.trade.id)
 
     def test_marker_time_is_unix_timestamp(self):
         ts = datetime(2025, 1, 15, 14, 30, 0, tzinfo=timezone.utc)
         leg = _make_leg(side="buy", role="entry", executed_at=ts)
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["time"] == int(ts.timestamp())
-
-
-class TestBuildMarkersShort:
-    """Test marker generation for short-direction groups."""
-
-    def test_entry_marker_short(self):
-        leg = _make_leg(side="sell", role="entry")
-        markers = build_markers([leg], direction="short")
-
-        assert len(markers) == 1
-        m = markers[0]
-        assert m["position"] == "belowBar"
-        assert m["shape"] == "arrowDown"  # sell -> arrowDown
-        assert m["role"] == "entry"
-
-    def test_exit_marker_short(self):
-        leg = _make_leg(side="buy", role="exit")
-        markers = build_markers([leg], direction="short")
-
-        assert len(markers) == 1
-        m = markers[0]
-        assert m["position"] == "aboveBar"
-        assert m["shape"] == "arrowUp"  # buy -> arrowUp
-        assert m["role"] == "exit"
 
 
 class TestBuildMarkersSorting:
@@ -181,14 +153,29 @@ class TestBuildMarkersSorting:
             _make_leg(side="buy", role="entry", executed_at=t1),
             _make_leg(side="buy", role="add", executed_at=t2),
         ]
-        markers = build_markers(legs, direction="long")
+        markers = build_markers(legs)
 
         times = [m["time"] for m in markers]
         assert times == sorted(times)
 
     def test_empty_legs_returns_empty(self):
-        markers = build_markers([], direction="long")
+        markers = build_markers([])
         assert markers == []
+
+    def test_stable_order_for_same_timestamp(self):
+        ts = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        first = _make_leg(side="sell", role="entry", executed_at=ts)
+        second = _make_leg(side="buy", role="add", executed_at=ts)
+        third = _make_leg(side="sell", role="trim", executed_at=ts)
+
+        markers = build_markers([first, second, third])
+
+        assert [m["trade_id"] for m in markers] == [
+            str(first.trade.id),
+            str(second.trade.id),
+            str(third.trade.id),
+        ]
+        assert [m["side"] for m in markers] == ["sell", "buy", "sell"]
 
 
 # ===========================================================================
@@ -206,7 +193,7 @@ class TestBuildMarkersTextFormatting:
             quantity=Decimal("1.00000000"),
             price=Decimal("182.55"),
         )
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["text"] == "1"
 
     def test_trailing_zeros_stripped_from_price(self):
@@ -216,7 +203,7 @@ class TestBuildMarkersTextFormatting:
             quantity=Decimal("100"),
             price=Decimal("182.55000000"),
         )
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["text"] == "100"
 
     def test_integer_values_no_decimal_point(self):
@@ -226,7 +213,7 @@ class TestBuildMarkersTextFormatting:
             quantity=Decimal("50.00000000"),
             price=Decimal("200.00000000"),
         )
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["text"] == "50"
 
     def test_fractional_values_preserved(self):
@@ -236,7 +223,7 @@ class TestBuildMarkersTextFormatting:
             quantity=Decimal("0.5"),
             price=Decimal("3.14159"),
         )
-        markers = build_markers([leg], direction="long")
+        markers = build_markers([leg])
         assert markers[0]["text"] == "0.5"
 
 

@@ -151,6 +151,48 @@ class DabentoProvider:
 
         return local_df.tz_convert(timezone.utc)
 
+    def _fetch_df(
+        self,
+        db_symbol: str,
+        stype_in: str,
+        schema: str,
+        interval: str,
+        start: datetime,
+        end: datetime,
+    ):
+        """Fetch raw DataFrame from Databento and apply RTH filter.
+
+        Returns the RTH-filtered DataFrame (may be empty).
+        Raises ProviderError / ProviderAuthError on API failures.
+        """
+        try:
+            data = self.client.timeseries.get_range(
+                dataset=self.DATASET,
+                symbols=db_symbol,
+                schema=schema,
+                stype_in=stype_in,
+                start=start.isoformat(),
+                end=end.isoformat(),
+            )
+            df = data.to_df()
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
+            logger.error(
+                "databento_api_error",
+                symbol=db_symbol,
+                stype_in=stype_in,
+                interval=interval,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            if "auth" in str(exc).lower() or "key" in str(exc).lower():
+                raise ProviderAuthError(f"Databento auth failed: {exc}") from exc
+            raise ProviderError(f"Databento API error: {exc}") from exc
+
+        if df.empty:
+            return df
+
+        return self._filter_rth(df)
+
     def fetch_ohlcv(
         self,
         symbol: str,
@@ -168,33 +210,21 @@ class DabentoProvider:
         schema_info = self.INTERVAL_SCHEMA_MAP.get(interval, ("ohlcv-1h", False))
         schema, needs_resample = schema_info
 
-        try:
-            data = self.client.timeseries.get_range(
-                dataset=self.DATASET,
-                symbols=db_symbol,
-                schema=schema,
-                stype_in="continuous",
-                start=start.isoformat(),
-                end=end.isoformat(),
-            )
+        df = self._fetch_df(db_symbol, "continuous", schema, interval, start, end)
 
-            df = data.to_df()
-        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
-            logger.error(
-                "databento_api_error",
-                symbol=db_symbol,
-                interval=interval,
-                error=str(exc),
-                error_type=type(exc).__name__,
+        # On contract roll dates the continuous front-month symbol may have
+        # no RTH data (e.g. expiration Friday where MES.c.0 stops at
+        # pre-market).  Fall back to the raw contract symbol if the original
+        # trade symbol is a specific contract (e.g. MESU5 != MES).
+        if df.empty and symbol != db_symbol.removesuffix(".c.0"):
+            logger.info(
+                "continuous_rth_empty_fallback_to_raw",
+                continuous_symbol=db_symbol,
+                raw_symbol=symbol,
             )
-            if "auth" in str(exc).lower() or "key" in str(exc).lower():
-                raise ProviderAuthError(f"Databento auth failed: {exc}") from exc
-            raise ProviderError(f"Databento API error: {exc}") from exc
-        if df.empty:
-            return []
+            databento_counter.check_and_increment()
+            df = self._fetch_df(symbol, "raw_symbol", schema, interval, start, end)
 
-        # Futures should only expose RTH bars in charts.
-        df = self._filter_rth(df)
         if df.empty:
             return []
 

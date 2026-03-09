@@ -328,7 +328,7 @@ def get_group_chart(
 
     # Build markers from legs, snap marker times to actual candle bars
     bar_times = [bar.time for bar in bars]
-    markers_raw = build_markers(group.legs, group.direction, bar_times=bar_times)
+    markers_raw = build_markers(group.legs, bar_times=bar_times)
     markers = [MarkerData(**m) for m in markers_raw]
 
     candles = [
