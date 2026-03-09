@@ -74,6 +74,7 @@ class TradeGroupLeg(Base):
     __tablename__ = "trade_group_legs"
     __table_args__ = (
         Index("idx_trade_group_legs_group_id", "trade_group_id"),
+        Index("idx_trade_group_legs_trade_id", "trade_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

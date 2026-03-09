@@ -84,6 +84,7 @@ export default function PnLCalendar() {
 
           const pnl = cell.entry ? Number(cell.entry.net_pnl) : 0;
           const hasData = cell.entry !== null;
+          const hasActivity = cell.entry?.has_activity === true;
           const bgColor = !hasData
             ? "bg-gray-50"
             : pnl > 0
@@ -96,11 +97,11 @@ export default function PnLCalendar() {
             <div
               key={`day-${year}-${month}-${cell.day}`}
               className={`${bgColor} rounded p-1 min-h-[40px] flex flex-col items-center justify-center ${
-                hasData ? "cursor-pointer hover:ring-2 hover:ring-blue-400" : ""
+                hasActivity ? "cursor-pointer hover:ring-2 hover:ring-blue-400" : ""
               }`}
               title={hasData ? `$${pnl.toFixed(2)} (${cell.entry!.trade_count} trades)` : ""}
-              onClick={hasData ? () => setSelectedDate(cell.dateStr) : undefined}
-              onMouseEnter={hasData ? preloadDayTrades : undefined}
+              onClick={hasActivity ? () => setSelectedDate(cell.dateStr) : undefined}
+              onMouseEnter={hasActivity ? preloadDayTrades : undefined}
             >
               <span className="text-gray-600">{cell.day}</span>
               {hasData ? (

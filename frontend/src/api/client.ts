@@ -186,3 +186,21 @@ export async function recomputeGroups(
   });
   return handleResponse(response);
 }
+
+export interface ActiveGroup extends TradeGroup {
+  day_roles: string[];
+}
+
+export interface ActiveGroupsListResponse {
+  groups: ActiveGroup[];
+}
+
+export async function fetchGroupsByActivityDate(
+  date: string,
+): Promise<ActiveGroupsListResponse> {
+  const params = new URLSearchParams({ date });
+  const response = await fetch(`${getApiBase()}/groups/by-activity-date?${params}`, {
+    headers: getHeaders(),
+  });
+  return handleResponse(response);
+}

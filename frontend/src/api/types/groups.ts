@@ -34,6 +34,14 @@ export interface TradeGroupListResponse {
   per_page: number;
 }
 
+export interface ActiveGroup extends TradeGroup {
+  day_roles: string[];
+}
+
+export interface ActiveGroupsListResponse {
+  groups: ActiveGroup[];
+}
+
 export interface CandleData {
   time: number;
   open: number;

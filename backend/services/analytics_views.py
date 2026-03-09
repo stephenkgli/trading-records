@@ -35,6 +35,8 @@ def _calendar_row_converter(row: dict) -> dict:
         "date": row["date"],
         "net_pnl": row["net_pnl"] or 0,
         "trade_count": row["trade_count"] or 0,
+        "closed_count": (row.get("win_count") or 0) + (row.get("loss_count") or 0),
+        "has_activity": row.get("has_activity", False),
     }
 
 

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
-import { fetchGroups } from "../api/client";
-import { formatDateTime } from "../utils/date";
+import { fetchGroupsByActivityDate } from "../api/endpoints/groups";
 
 const TradeChartModal = lazy(() => import("./TradeChartModal"));
 
@@ -12,42 +11,36 @@ interface Props {
   onClose: () => void;
 }
 
+const ROLE_STYLES: Record<string, string> = {
+  entry: "bg-green-900/50 text-green-400",
+  add: "bg-blue-900/50 text-blue-400",
+  trim: "bg-orange-900/50 text-orange-400",
+  exit: "bg-red-900/50 text-red-400",
+};
+
 const tableHeader = (
   <thead>
     <tr className="text-left text-gray-400 border-b border-gray-700">
       <th className="py-2 px-3">Symbol</th>
       <th className="py-2 px-3">Direction</th>
+      <th className="py-2 px-3">Status</th>
       <th className="py-2 px-3 text-right">P&L</th>
-      <th className="py-2 px-3">Opened</th>
-      <th className="py-2 px-3">Closed</th>
+      <th className="py-2 px-3">Activity</th>
     </tr>
   </thead>
 );
 
 export default function DayTradesModal({ date, onClose }: Props) {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const closedFrom = `${date}T00:00:00Z`;
-  const nextDay = new Date(date + "T00:00:00Z");
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const closedTo = nextDay.toISOString().split("T")[0] + "T00:00:00Z";
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["dayGroups", date],
-    queryFn: () =>
-      fetchGroups(
-        1,
-        "closed",
-        undefined,
-        "closed_at",
-        "asc",
-        undefined,
-        closedFrom,
-        closedTo,
-      ),
+    queryKey: ["dayActivity", date],
+    queryFn: () => fetchGroupsByActivityDate(date),
   });
 
   const groups = data?.groups ?? [];
-  const totalPnl = groups.reduce(
+  const closedGroups = groups.filter((g) => g.status === "closed");
+  const totalPnl = closedGroups.reduce(
     (sum, g) => sum + (g.realized_pnl ? Number(g.realized_pnl) : 0),
     0,
   );
@@ -67,16 +60,18 @@ export default function DayTradesModal({ date, onClose }: Props) {
             {!isLoading && groups.length > 0 && (
               <>
                 <span className="text-sm text-gray-400">
-                  {groups.length} closed
+                  {groups.length} group{groups.length !== 1 ? "s" : ""}
                 </span>
-                <span
-                  className={`text-sm font-medium ${
-                    totalPnl >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  P&L: {totalPnl >= 0 ? "+" : ""}
-                  {totalPnl.toFixed(2)}
-                </span>
+                {closedGroups.length > 0 && (
+                  <span
+                    className={`text-sm font-medium ${
+                      totalPnl >= 0 ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    P&L: {totalPnl >= 0 ? "+" : ""}
+                    {totalPnl.toFixed(2)}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -101,7 +96,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
           )}
           {data && groups.length === 0 && (
             <div className="text-gray-400 text-center py-4">
-              No closed trades on this day
+              No trade activity on this day
             </div>
           )}
           {groups.length > 0 && (
@@ -109,7 +104,8 @@ export default function DayTradesModal({ date, onClose }: Props) {
               {tableHeader}
               <tbody>
                 {groups.map((g) => {
-                  const pnl = g.realized_pnl ? Number(g.realized_pnl) : 0;
+                  const isClosed = g.status === "closed";
+                  const pnl = isClosed && g.realized_pnl ? Number(g.realized_pnl) : 0;
                   return (
                     <tr
                       key={g.id}
@@ -131,19 +127,43 @@ export default function DayTradesModal({ date, onClose }: Props) {
                           {g.direction.toUpperCase()}
                         </span>
                       </td>
+                      <td className="py-2 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            isClosed
+                              ? "bg-gray-700 text-gray-300"
+                              : "bg-blue-900/50 text-blue-400"
+                          }`}
+                        >
+                          {g.status.toUpperCase()}
+                        </span>
+                      </td>
                       <td
                         className={`py-2 px-3 text-right font-medium ${
-                          pnl >= 0 ? "text-green-400" : "text-red-400"
+                          !isClosed
+                            ? "text-gray-500"
+                            : pnl >= 0
+                              ? "text-green-400"
+                              : "text-red-400"
                         }`}
                       >
-                        {pnl >= 0 ? "+" : ""}
-                        {pnl.toFixed(2)}
+                        {isClosed
+                          ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`
+                          : "\u2014"}
                       </td>
-                      <td className="py-2 px-3 text-gray-400">
-                        {formatDateTime(g.opened_at)}
-                      </td>
-                      <td className="py-2 px-3 text-gray-400">
-                        {formatDateTime(g.closed_at)}
+                      <td className="py-2 px-3">
+                        <div className="flex gap-1 flex-wrap">
+                          {g.day_roles.map((role) => (
+                            <span
+                              key={role}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                ROLE_STYLES[role] ?? "bg-gray-700 text-gray-300"
+                              }`}
+                            >
+                              {role}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                     </tr>
                   );

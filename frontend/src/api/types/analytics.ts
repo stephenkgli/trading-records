@@ -17,6 +17,8 @@ export interface CalendarEntry {
   date: string;
   net_pnl: string;
   trade_count: number;
+  closed_count: number;
+  has_activity: boolean;
 }
 
 export interface SymbolBreakdown {

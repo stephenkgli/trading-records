@@ -27,6 +27,8 @@ class CalendarEntry(BaseModel):
     date: date
     net_pnl: Decimal
     trade_count: int
+    closed_count: int
+    has_activity: bool
 
 
 class SymbolBreakdown(BaseModel):

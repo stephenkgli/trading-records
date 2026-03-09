@@ -307,16 +307,69 @@ def get_calendar_data(
     month: int,
     account_id: str | None = None,
 ) -> list[dict]:
-    """Fetch calendar data for a specific month."""
+    """Fetch calendar data for a specific month, including activity flags."""
     from_date = date(year, month, 1)
     if month == 12:
         to_date = date(year + 1, 1, 1)
     else:
         to_date = date(year, month + 1, 1)
 
-    return get_daily_summaries(
+    rows = get_daily_summaries(
         db, from_date=from_date, to_date=to_date, account_id=account_id
     )
+
+    # Query dates that have any trade leg activity (entry/add/trim/exit)
+    bind = db.get_bind()
+    is_pg = bind is not None and bind.dialect.name == "postgresql"
+
+    if is_pg:
+        date_cast = "DATE(t.executed_at AT TIME ZONE 'UTC')"
+    else:
+        date_cast = "DATE(t.executed_at)"
+
+    activity_sql = f"""
+        SELECT DISTINCT {date_cast} AS act_date
+        FROM trades t
+        JOIN trade_group_legs tgl ON tgl.trade_id = t.id
+        WHERE {date_cast} >= :from_date
+          AND {date_cast} < :to_date
+    """
+    activity_params: dict = {
+        "from_date": from_date.isoformat() if not is_pg else from_date,
+        "to_date": to_date.isoformat() if not is_pg else to_date,
+    }
+    activity_rows = db.execute(text(activity_sql), activity_params).mappings().all()
+    activity_dates: set[str] = set()
+    for r in activity_rows:
+        d = r["act_date"]
+        if isinstance(d, str):
+            activity_dates.add(d)
+        else:
+            activity_dates.add(d.isoformat())
+
+    # Mark has_activity on existing rows
+    existing_dates: set[str] = set()
+    for row in rows:
+        d = row["date"]
+        date_str = d.isoformat() if not isinstance(d, str) else d
+        existing_dates.add(date_str)
+        row["has_activity"] = date_str in activity_dates
+
+    # Add rows for dates that have activity but no P&L summary
+    for act_date_str in activity_dates - existing_dates:
+        rows.append({
+            "date": act_date_str,
+            "account_id": account_id or "",
+            "gross_pnl": 0,
+            "net_pnl": 0,
+            "commissions": 0,
+            "trade_count": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "has_activity": True,
+        })
+
+    return rows
 
 
 def get_by_symbol(

@@ -3,7 +3,7 @@
  */
 
 import { getApiBase, getHeaders, handleResponse } from "./http";
-import type { TradeGroupDetail, TradeGroupListResponse, GroupChartData } from "../types";
+import type { TradeGroupDetail, TradeGroupListResponse, GroupChartData, ActiveGroupsListResponse } from "../types";
 
 function applyAssetClassParams(
   params: URLSearchParams,
@@ -65,6 +65,16 @@ export async function fetchGroupChart(
   groupId: string
 ): Promise<GroupChartData> {
   const response = await fetch(`${getApiBase()}/groups/${groupId}/chart`, {
+    headers: getHeaders(),
+  });
+  return handleResponse(response);
+}
+
+export async function fetchGroupsByActivityDate(
+  date: string,
+): Promise<ActiveGroupsListResponse> {
+  const params = new URLSearchParams({ date });
+  const response = await fetch(`${getApiBase()}/groups/by-activity-date?${params}`, {
     headers: getHeaders(),
   });
   return handleResponse(response);

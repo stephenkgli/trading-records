@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
@@ -175,6 +175,74 @@ def list_groups(
         page=page,
         per_page=per_page,
     )
+
+
+class ActiveGroupResponse(TradeGroupResponse):
+    day_roles: list[str]
+
+
+class ActiveGroupsListResponse(BaseModel):
+    groups: list[ActiveGroupResponse]
+
+
+@router.get("/by-activity-date", response_model=ActiveGroupsListResponse)
+def list_groups_by_activity_date(
+    target_date: date = Query(..., alias="date", description="Date to find active groups for (YYYY-MM-DD)"),
+    account_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """List trade groups that had any leg activity on the given date."""
+    bind = db.get_bind()
+    is_pg = bind is not None and bind.dialect.name == "postgresql"
+
+    if is_pg:
+        agg_fn = "STRING_AGG(DISTINCT tgl.role, ',')"
+        date_cast = "DATE(t.executed_at AT TIME ZONE 'UTC')"
+    else:
+        agg_fn = "GROUP_CONCAT(DISTINCT tgl.role)"
+        date_cast = "DATE(t.executed_at)"
+
+    query = f"""
+        SELECT tg.id, tg.account_id, tg.symbol, tg.asset_class,
+               tg.direction, tg.strategy_tag, tg.status,
+               tg.realized_pnl, tg.opened_at, tg.closed_at, tg.notes,
+               {agg_fn} AS day_roles
+        FROM trade_groups tg
+        JOIN trade_group_legs tgl ON tgl.trade_group_id = tg.id
+        JOIN trades t ON t.id = tgl.trade_id
+        WHERE {date_cast} = :target_date
+    """
+    params: dict = {"target_date": target_date.isoformat() if not is_pg else target_date}
+
+    if account_id:
+        query += " AND tg.account_id = :account_id"
+        params["account_id"] = account_id
+
+    query += " GROUP BY tg.id ORDER BY tg.opened_at ASC"
+
+    rows = db.execute(text(query), params).mappings().all()
+
+    groups = []
+    for row in rows:
+        roles_str = row["day_roles"] or ""
+        day_roles = [r.strip() for r in roles_str.split(",") if r.strip()]
+        group_data = {
+            "id": row["id"],
+            "account_id": row["account_id"],
+            "symbol": row["symbol"],
+            "asset_class": row["asset_class"],
+            "direction": row["direction"],
+            "strategy_tag": row["strategy_tag"],
+            "status": row["status"],
+            "realized_pnl": row["realized_pnl"],
+            "opened_at": row["opened_at"],
+            "closed_at": row["closed_at"],
+            "notes": row["notes"],
+            "day_roles": day_roles,
+        }
+        groups.append(ActiveGroupResponse(**group_data))
+
+    return ActiveGroupsListResponse(groups=groups)
 
 
 @router.get("/{group_id}/chart", response_model=GroupChartResponse)

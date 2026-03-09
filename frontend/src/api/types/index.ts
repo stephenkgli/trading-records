@@ -24,6 +24,8 @@ export type {
   TradeGroupLeg,
   TradeGroupDetail,
   TradeGroupListResponse,
+  ActiveGroup,
+  ActiveGroupsListResponse,
   CandleData,
   MarkerData,
   MarkerPosition,
