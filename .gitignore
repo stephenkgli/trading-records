@@ -60,13 +60,14 @@ coverage.xml
 # Static files (built frontend served by backend)
 static/
 
-# Chat logs
-chats/
-
 # Agent
 .claude/
 .codex/
 .codebuddy/
+.agents/
+skills-lock.json
 
 # Docs
 workspace/
+chats/
+docs/
