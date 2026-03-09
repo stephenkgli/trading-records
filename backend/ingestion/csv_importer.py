@@ -16,7 +16,7 @@ import hashlib
 import io
 import re
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -178,7 +178,7 @@ class CSVImporter(BaseIngester):
                     trades.extend(result)
                 else:
                     trades.append(result)
-            except Exception as e:
+            except (ValueError, KeyError, TypeError, InvalidOperation) as e:
                 logger.warning(
                     error_event,
                     filename=filename,
@@ -243,7 +243,7 @@ class CSVImporter(BaseIngester):
                     )
                     if trade:
                         trades.append(trade)
-                except Exception as e:
+                except (ValueError, KeyError, TypeError, InvalidOperation) as e:
                     logger.warning(
                         "ibkr_csv_parse_error",
                         filename=filename,
@@ -349,7 +349,7 @@ class CSVImporter(BaseIngester):
         candidate = (configured_tz or "").strip() or fallback_tz
         try:
             return cls._zoneinfo(candidate)
-        except Exception:
+        except (KeyError, ValueError):
             logger.warning(
                 "csv_timezone_fallback",
                 setting_name=setting_name,
@@ -689,7 +689,7 @@ class CSVImporter(BaseIngester):
         try:
             val = Decimal(s)
             return -val if negative else val
-        except Exception:
+        except (InvalidOperation, ValueError, ArithmeticError):
             return None
 
     @classmethod

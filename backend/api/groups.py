@@ -10,6 +10,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
@@ -349,7 +350,7 @@ def recompute(
     if bind and bind.dialect.name == "postgresql":
         try:
             refresh_daily_summaries(db=db)
-        except Exception:
-            pass  # 刷新失败不影响 recompute 结果
+        except SQLAlchemyError:
+            logger.debug("daily_summaries_refresh_skipped_after_recompute")
 
     return RecomputeResponse(**result)

@@ -9,6 +9,7 @@ import time
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
@@ -138,7 +139,7 @@ def refresh_daily_summaries(db: Session | None = None) -> None:
                     duration_ms=int((time.perf_counter() - start) * 1000),
                 )
                 return
-            except Exception as exc:
+            except (SQLAlchemyError, RuntimeError) as exc:
                 logger.warning(
                     "daily_summaries_concurrent_refresh_failed",
                     error=str(exc),
@@ -152,7 +153,7 @@ def refresh_daily_summaries(db: Session | None = None) -> None:
                 mode="exclusive",
                 duration_ms=int((time.perf_counter() - start) * 1000),
             )
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.error(
                 "daily_summaries_refresh_error",
                 error=str(exc),
@@ -222,7 +223,7 @@ def _get_daily_summaries_from_view_or_trades(
     try:
         rows = db.execute(text(query), params).mappings().all()
         return [dict(row) for row in rows]
-    except Exception:
+    except SQLAlchemyError:
         logger.warning("daily_summaries_view_unavailable_fallback_to_trades")
         return _compute_daily_summaries_from_trades(
             db,
@@ -540,7 +541,7 @@ def _get_win_loss_from_groups(
                 "avg_win": Decimal(str(row["avg_win"])),
                 "avg_loss": Decimal(str(row["avg_loss"])),
             }
-    except Exception:
+    except SQLAlchemyError:
         logger.warning("trade_groups_win_loss_query_failed")
 
     return {"win_count": 0, "loss_count": 0, "avg_win": Decimal("0"), "avg_loss": Decimal("0")}

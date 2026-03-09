@@ -179,7 +179,7 @@ class DabentoProvider:
             )
 
             df = data.to_df()
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
             logger.error(
                 "databento_api_error",
                 symbol=db_symbol,

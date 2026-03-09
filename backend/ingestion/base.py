@@ -12,6 +12,7 @@ from typing import Sequence
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
@@ -196,7 +197,7 @@ class BaseIngester:
                 affected_pairs = {(t.account_id, t.symbol) for t in imported_trades}
                 for account_id, symbol in affected_pairs:
                     recompute_groups(db=db, symbol=symbol, account_id=account_id)
-            except Exception as exc:
+            except (SQLAlchemyError, ValueError, RuntimeError) as exc:
                 logger.warning(
                     "post_import_group_recompute_failed",
                     source=self.source,
@@ -210,7 +211,7 @@ class BaseIngester:
                     from backend.services.analytics import refresh_daily_summaries
 
                     refresh_daily_summaries(db=db)
-                except Exception as exc:
+                except (SQLAlchemyError, RuntimeError) as exc:
                     logger.warning(
                         "post_import_refresh_failed",
                         source=self.source,

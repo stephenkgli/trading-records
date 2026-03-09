@@ -2,6 +2,11 @@
 name = "trading-records"
 version = "0.1.0"
 description = "Self-hosted trading records system for IBKR and Tradovate"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "stephenkgli"},
+]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
@@ -20,6 +25,18 @@ dependencies = [
     "tiingo>=0.5.0",
     "python-dateutil>=2.9.0",
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+]
+
+[project.urls]
+Homepage = "https://github.com/stephenkgli/trading-records"
+Repository = "https://github.com/stephenkgli/trading-records"
+Issues = "https://github.com/stephenkgli/trading-records/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -28,6 +45,9 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "respx>=0.22.0",
     "testcontainers[postgres]>=4.9.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.0",
 ]
 
 [build-system]
@@ -40,3 +60,47 @@ asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["backend/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+]

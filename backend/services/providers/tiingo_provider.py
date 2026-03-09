@@ -68,7 +68,7 @@ class TiingoProvider:
                 endDate=end.strftime("%Y-%m-%d"),
                 frequency=frequency,
             )
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
             logger.error(
                 "tiingo_api_error",
                 symbol=symbol,
