@@ -1,11 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, lazy, Suspense } from "react";
 import { fetchCalendar, type CalendarEntry } from "../api/client";
+
+const DayTradesModal = lazy(() => import("./DayTradesModal"));
+
+const preloadDayTrades = () => void import("./DayTradesModal");
 
 export default function PnLCalendar() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const { data } = useQuery({
     queryKey: ["calendar", year, month],
@@ -23,17 +28,17 @@ export default function PnLCalendar() {
       dataMap.set(entry.date, entry);
     });
 
-    const cells: Array<{ day: number | null; entry: CalendarEntry | null }> = [];
+    const cells: Array<{ day: number | null; dateStr: string | null; entry: CalendarEntry | null }> = [];
 
     // Leading empty cells
     for (let i = 0; i < startDow; i++) {
-      cells.push({ day: null, entry: null });
+      cells.push({ day: null, dateStr: null, entry: null });
     }
 
     // Day cells
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      cells.push({ day: d, entry: dataMap.get(dateStr) || null });
+      cells.push({ day: d, dateStr, entry: dataMap.get(dateStr) || null });
     }
 
     return cells;
@@ -90,8 +95,12 @@ export default function PnLCalendar() {
           return (
             <div
               key={`day-${year}-${month}-${cell.day}`}
-              className={`${bgColor} rounded p-1 min-h-[40px] flex flex-col items-center justify-center`}
+              className={`${bgColor} rounded p-1 min-h-[40px] flex flex-col items-center justify-center ${
+                hasData ? "cursor-pointer hover:ring-2 hover:ring-blue-400" : ""
+              }`}
               title={hasData ? `$${pnl.toFixed(2)} (${cell.entry!.trade_count} trades)` : ""}
+              onClick={hasData ? () => setSelectedDate(cell.dateStr) : undefined}
+              onMouseEnter={hasData ? preloadDayTrades : undefined}
             >
               <span className="text-gray-600">{cell.day}</span>
               {hasData ? (
@@ -103,6 +112,15 @@ export default function PnLCalendar() {
           );
         })}
       </div>
+
+      {selectedDate && (
+        <Suspense fallback={null}>
+          <DayTradesModal
+            date={selectedDate}
+            onClose={() => setSelectedDate(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

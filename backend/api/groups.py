@@ -122,6 +122,8 @@ def list_groups(
         None,
         description="Comma-separated asset classes, e.g. stock,future,option,forex",
     ),
+    closed_from: datetime | None = Query(None, description="Filter groups closed on or after this datetime"),
+    closed_to: datetime | None = Query(None, description="Filter groups closed strictly before this datetime"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     sort: str = Query("opened_at"),
@@ -143,6 +145,10 @@ def list_groups(
         query = query.where(TradeGroup.account_id == account_id)
     if asset_class_list:
         query = query.where(TradeGroup.asset_class.in_(asset_class_list))
+    if closed_from:
+        query = query.where(TradeGroup.closed_at >= closed_from)
+    if closed_to:
+        query = query.where(TradeGroup.closed_at < closed_to)
 
     count_query = select(func.count()).select_from(query.subquery())
     total = db.execute(count_query).scalar_one()

@@ -24,6 +24,8 @@ export async function fetchGroups(
   sort?: string,
   order?: "asc" | "desc",
   assetClasses?: string[],
+  closedFrom?: string,
+  closedTo?: string,
 ): Promise<TradeGroupListResponse> {
   const params = new URLSearchParams({ page: String(page) });
   if (status) params.set("status", status);
@@ -31,6 +33,8 @@ export async function fetchGroups(
   if (sort) params.set("sort", sort);
   if (order) params.set("order", order);
   applyAssetClassParams(params, assetClasses);
+  if (closedFrom) params.set("closed_from", closedFrom);
+  if (closedTo) params.set("closed_to", closedTo);
   const response = await fetch(`${getApiBase()}/groups?${params}`, {
     headers: getHeaders(),
   });
