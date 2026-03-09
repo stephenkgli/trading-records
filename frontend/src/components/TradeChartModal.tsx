@@ -11,6 +11,13 @@ interface Props {
   onClose: () => void;
 }
 
+const chartLoadingSkeleton = (
+  <div className="flex flex-col gap-2">
+    <div className="h-[320px] bg-gray-800 animate-pulse rounded" />
+    <div className="h-[72px] bg-gray-800 animate-pulse rounded" />
+  </div>
+);
+
 /** Format P&L value with sign prefix and colour class. */
 function pnlDisplay(pnl: number | string | null | undefined): {
   text: string;
@@ -123,12 +130,7 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
         </div>
 
         <div className="p-4 bg-[#1a1a2e]">
-          {isLoading && (
-            <div className="flex flex-col gap-2">
-              <div className="h-[320px] bg-gray-800 animate-pulse rounded" />
-              <div className="h-[72px] bg-gray-800 animate-pulse rounded" />
-            </div>
-          )}
+          {isLoading && chartLoadingSkeleton}
           {error && (
             <div className="flex flex-col items-center justify-center h-[400px] text-red-400 gap-2">
               <span>Failed to load chart data</span>
@@ -143,7 +145,6 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
             <>
               <DrawingToolbar
                 chart={chart}
-                disabled={!chart}
                 selectedOverlayId={selectedOverlayId}
                 onDeleteSelected={() => setSelectedOverlayId(null)}
                 onClearAll={() => setSelectedOverlayId(null)}

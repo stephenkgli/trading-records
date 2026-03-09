@@ -30,6 +30,20 @@ class TestHealthEndpoint:
         data = response.json()
         assert "status" in data
 
+    def test_health_returns_503_when_db_unavailable(self, client, db_session, monkeypatch):
+        """When database is unavailable, health endpoint should return 503."""
+
+        def _raise_db_error(*args, **kwargs):
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(db_session, "execute", _raise_db_error)
+
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["database"] == "disconnected"
+
     def test_health_with_auth_also_works(self, client):
         """GET /health should also work if auth headers are provided."""
         response = client.get("/health")

@@ -1,9 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   fetchGroups,
   recomputeGroups,
-  fetchAvailableAssetClasses,
   type TradeGroup,
 } from "../api/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,41 +15,27 @@ import {
 } from "@tanstack/react-table";
 import AssetClassFilter from "../components/AssetClassFilter";
 import { formatDateTime } from "../utils/date";
+import { useAssetClassFilter } from "../hooks/useAssetClassFilter";
 
 const TradeChartModal = lazy(() => import("../components/TradeChartModal"));
 
-const STORAGE_KEY = "groups_asset_class_filter";
+const preloadChart = () => void import("../components/TradeChartModal");
 
 type GroupsTableMeta = {
   pageOffset: number;
 };
 
-function loadSavedSelection(): string[] | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return null;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSelection(assetClasses: string[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(assetClasses));
-  } catch {
-    // ignore quota errors
-  }
-}
-
 export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [selectedAssetClasses, setSelectedAssetClasses] = useState<string[] | null>(null);
-  const initializedRef = useRef(false);
+  const {
+    availableAssetClasses,
+    selectedAssetClasses,
+    setSelectedAssetClasses,
+    assetClassesParam,
+    isInitialized,
+  } = useAssetClassFilter("groups_asset_class_filter");
   const [sorting, setSorting] = useState<SortingState>([
     { id: "opened_at", desc: true },
   ]);
@@ -59,42 +44,11 @@ export default function GroupsPage() {
   const orderParam: "asc" | "desc" | undefined = sorting[0]
     ? (sorting[0].desc ? "desc" : "asc")
     : undefined;
-  const assetClassesParam =
-    selectedAssetClasses === null ? undefined : selectedAssetClasses;
 
-  const { data: availableAssetClasses = [], isFetched: isAssetClassesFetched } = useQuery({
-    queryKey: ["availableAssetClasses"],
-    queryFn: fetchAvailableAssetClasses,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (!isAssetClassesFetched || initializedRef.current) return;
-    initializedRef.current = true;
-
-    const saved = loadSavedSelection();
-    if (saved === null) {
-      setSelectedAssetClasses([...availableAssetClasses]);
-    } else {
-      const validSet = new Set(availableAssetClasses);
-      const restored = saved.filter((ac) => validSet.has(ac));
-      setSelectedAssetClasses(restored);
-    }
-  }, [availableAssetClasses, isAssetClassesFetched]);
-
-  useEffect(() => {
-    if (selectedAssetClasses === null) return;
-    saveSelection(selectedAssetClasses);
-  }, [selectedAssetClasses]);
-
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPlaceholderData } = useQuery({
     queryKey: [
       "groups",
-      page,
-      statusFilter,
-      sortParam,
-      orderParam,
-      assetClassesParam,
+      { page, status: statusFilter, sort: sortParam, order: orderParam, assetClasses: assetClassesParam },
     ],
     queryFn: () =>
       fetchGroups(
@@ -105,10 +59,11 @@ export default function GroupsPage() {
         orderParam,
         assetClassesParam,
       ),
-    enabled: selectedAssetClasses !== null,
+    enabled: isInitialized,
+    placeholderData: keepPreviousData,
   });
 
-  const isGroupsLoading = selectedAssetClasses === null || isLoading;
+  const isGroupsLoading = !isInitialized || isLoading;
 
   const recomputeMutation = useMutation({
     mutationFn: () => recomputeGroups(),
@@ -122,7 +77,7 @@ export default function GroupsPage() {
   const handleAssetClassChange = useCallback((acs: string[]) => {
     setSelectedAssetClasses(acs);
     setPage(1);
-  }, []);
+  }, [setSelectedAssetClasses]);
 
   const columns = useMemo<ColumnDef<TradeGroup>[]>(
     () => [
@@ -255,7 +210,7 @@ export default function GroupsPage() {
       )}
 
       {data && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className={`bg-white rounded-lg shadow overflow-hidden transition-opacity ${isPlaceholderData ? "opacity-60" : ""}`}>
           <div className="px-4 py-2 bg-gray-50 border-b text-sm text-gray-500">
             共 {data.total} 个交易组
           </div>
@@ -291,6 +246,7 @@ export default function GroupsPage() {
                   key={row.id}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedGroupId(row.original.id)}
+                  onMouseEnter={preloadChart}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td

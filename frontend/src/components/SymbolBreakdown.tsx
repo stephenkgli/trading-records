@@ -16,13 +16,15 @@ interface SymbolBreakdownProps {
 }
 
 export default function SymbolBreakdown({ data }: SymbolBreakdownProps) {
-  const chartData = useMemo(
-    () =>
-      data.map((d) => ({
+  const { chartData, chartHeight } = useMemo(
+    () => {
+      const items = data.map((d) => ({
         symbol: d.symbol,
         pnl: Number(d.net_pnl),
         trades: d.trade_count,
-      })),
+      }));
+      return { chartData: items, chartHeight: Math.max(200, items.length * 35) };
+    },
     [data],
   );
 
@@ -31,7 +33,7 @@ export default function SymbolBreakdown({ data }: SymbolBreakdownProps) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={Math.max(200, chartData.length * 35)}>
+    <ResponsiveContainer width="100%" height={chartHeight}>
       <BarChart data={chartData} layout="vertical" margin={{ left: 60 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
         <XAxis type="number" tick={{ fontSize: 11 }} />

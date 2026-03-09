@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, datetime
 from decimal import Decimal
+import time
 
 import structlog
 from sqlalchemy import text
@@ -107,16 +108,57 @@ def _sqlite_safe_params(db: Session, params: dict) -> dict:
 
 
 def refresh_daily_summaries(db: Session | None = None) -> None:
-    """Refresh the daily_summaries materialized view concurrently."""
+    """Refresh the daily_summaries materialized view with safety guards."""
     with session_scope(db) as session:
+        bind = session.get_bind()
+        if not bind or bind.dialect.name != "postgresql":
+            return
+
+        start = time.perf_counter()
+        has_unique_index = session.execute(
+            text(
+                """
+                SELECT 1
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indrelid
+                WHERE c.relname = 'daily_summaries'
+                  AND i.indisunique
+                LIMIT 1
+                """
+            )
+        ).first() is not None
+
+        if has_unique_index:
+            try:
+                session.execute(text("SET LOCAL statement_timeout = '60000'"))
+                session.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY daily_summaries"))
+                logger.info(
+                    "daily_summaries_refreshed",
+                    mode="concurrent",
+                    duration_ms=int((time.perf_counter() - start) * 1000),
+                )
+                return
+            except Exception as exc:
+                logger.warning(
+                    "daily_summaries_concurrent_refresh_failed",
+                    error=str(exc),
+                )
+
         try:
-            session.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY daily_summaries"))
-            logger.info("daily_summaries_refreshed")
-        except Exception as e:
-            logger.error("daily_summaries_refresh_error", error=str(e))
-            # If CONCURRENTLY fails (e.g., no unique index populated), try without
+            session.execute(text("SET LOCAL statement_timeout = '120000'"))
             session.execute(text("REFRESH MATERIALIZED VIEW daily_summaries"))
-            logger.info("daily_summaries_refreshed_non_concurrent")
+            logger.info(
+                "daily_summaries_refreshed",
+                mode="exclusive",
+                duration_ms=int((time.perf_counter() - start) * 1000),
+            )
+        except Exception as exc:
+            logger.error(
+                "daily_summaries_refresh_error",
+                error=str(exc),
+                mode="exclusive",
+            )
+            raise
 
 
 def get_daily_summaries(
@@ -140,28 +182,41 @@ def _get_daily_summaries_from_view_or_trades(
     account_id: str | None = None,
     asset_classes: list[str] | None = None,
 ) -> list[dict]:
-    """Fetch daily summaries, falling back to raw trades when the view is unavailable."""
+    """Fetch daily summaries, falling back to computed summaries when needed."""
 
     if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return []
 
-    # 如果指定了资产类型过滤，视图中没有 asset_class 字段，直接使用 trade_groups 计算
-    if asset_classes:
-        return _compute_daily_summaries_filtered_by_asset_classes(
-            db, asset_classes=asset_classes, from_date=from_date, to_date=to_date,
-            account_id=account_id,
-        )
-
-    query = "SELECT * FROM daily_summaries WHERE 1=1"
+    query = """
+        SELECT
+            date,
+            account_id,
+            SUM(gross_pnl) AS gross_pnl,
+            SUM(net_pnl) AS net_pnl,
+            SUM(commissions) AS commissions,
+            SUM(trade_count) AS trade_count,
+            SUM(win_count) AS win_count,
+            SUM(loss_count) AS loss_count
+        FROM daily_summaries
+        WHERE 1=1
+    """
     params: dict = {}
 
     query = _append_date_account_filters(
-        query, params,
-        date_col="date", account_col="account_id",
-        from_date=from_date, to_date=to_date, account_id=account_id,
+        query,
+        params,
+        date_col="date",
+        account_col="account_id",
+        from_date=from_date,
+        to_date=to_date,
+        account_id=account_id,
     )
+    if asset_classes:
+        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes, prefix="mv_ac")
+        query += f" AND asset_class IN ({ac_sql})"
+        params.update(ac_params)
 
-    query += " ORDER BY date ASC"
+    query += " GROUP BY date, account_id ORDER BY date ASC"
     params = _sqlite_safe_params(db, params)
 
     try:
@@ -170,7 +225,10 @@ def _get_daily_summaries_from_view_or_trades(
     except Exception:
         logger.warning("daily_summaries_view_unavailable_fallback_to_trades")
         return _compute_daily_summaries_from_trades(
-            db, from_date=from_date, to_date=to_date, account_id=account_id,
+            db,
+            from_date=from_date,
+            to_date=to_date,
+            account_id=account_id,
             asset_classes=asset_classes,
         )
 
@@ -500,7 +558,6 @@ def get_performance_metrics(
     P&L is derived from trade_groups.realized_pnl (closed round-trips),
     not from raw buy/sell amounts.
     """
-    # asset_classes 为空列表 [] 表示用户未选任何资产类型，直接返回零值结果
     if _check_empty_asset_classes(asset_classes) is _EMPTY:
         return {
             "total_pnl": Decimal("0"),
@@ -517,40 +574,17 @@ def get_performance_metrics(
             "trading_days": 0,
         }
 
-    # 从 trade_groups 表获取正确的 win/loss count 和 avg_win/avg_loss
-    wl = _get_win_loss_from_groups(
-        db, from_date=from_date, to_date=to_date, account_id=account_id,
-        asset_classes=asset_classes,
-    )
-    win_count = wl["win_count"]
-    loss_count = wl["loss_count"]
-    avg_win = wl["avg_win"]
-    avg_loss = wl["avg_loss"]
-
-    # 从 trade_groups 计算总盈亏
-    pnl_query = """
+    group_metrics_sql = """
         SELECT
-            COALESCE(SUM(tg.realized_pnl), 0) AS total_pnl
+            COALESCE(SUM(tg.realized_pnl), 0) AS total_pnl,
+            COALESCE(SUM(CASE WHEN tg.realized_pnl > 0 THEN 1 ELSE 0 END), 0) AS win_count,
+            COALESCE(SUM(CASE WHEN tg.realized_pnl <= 0 THEN 1 ELSE 0 END), 0) AS loss_count,
+            COALESCE(AVG(CASE WHEN tg.realized_pnl > 0 THEN tg.realized_pnl END), 0) AS avg_win,
+            COALESCE(AVG(CASE WHEN tg.realized_pnl < 0 THEN tg.realized_pnl END), 0) AS avg_loss
         FROM trade_groups tg
         WHERE tg.status = 'closed'
     """
-    pnl_params: dict = {}
-    pnl_query = _append_date_account_filters(
-        pnl_query, pnl_params,
-        date_col="DATE(tg.closed_at)", account_col="tg.account_id",
-        from_date=from_date, to_date=to_date, account_id=account_id,
-    )
-    if asset_classes:
-        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes, prefix="pnl_ac")
-        pnl_query += f" AND tg.asset_class IN ({ac_sql})"
-        pnl_params.update(ac_params)
-
-    pnl_params = _sqlite_safe_params(db, pnl_params)
-    pnl_row = db.execute(text(pnl_query), pnl_params).mappings().first()
-    total_pnl = Decimal(str(pnl_row["total_pnl"])) if pnl_row else Decimal("0")
-
-    # 从 trades 计算佣金和交易数
-    comm_query = """
+    trade_metrics_sql = """
         SELECT
             COALESCE(SUM(ABS(t.commission)), 0) AS total_commissions,
             COUNT(*) AS total_trades,
@@ -558,35 +592,87 @@ def get_performance_metrics(
         FROM trades t
         WHERE 1=1
     """
-    comm_params: dict = {}
-    comm_query = _append_date_account_filters(
-        comm_query, comm_params,
-        date_col="DATE(t.executed_at)", account_col="t.account_id",
-        from_date=from_date, to_date=to_date, account_id=account_id,
+
+    params: dict = {}
+    group_metrics_sql = _append_date_account_filters(
+        group_metrics_sql,
+        params,
+        date_col="DATE(tg.closed_at)",
+        account_col="tg.account_id",
+        from_date=from_date,
+        to_date=to_date,
+        account_id=account_id,
     )
+    trade_metrics_sql = _append_date_account_filters(
+        trade_metrics_sql,
+        params,
+        date_col="DATE(t.executed_at)",
+        account_col="t.account_id",
+        from_date=from_date,
+        to_date=to_date,
+        account_id=account_id,
+    )
+
     if asset_classes:
-        ac_sql, ac_params = _build_asset_class_in_clause(asset_classes, prefix="comm_ac")
-        comm_query += f" AND t.asset_class IN ({ac_sql})"
-        comm_params.update(ac_params)
+        g_ac_sql, g_ac_params = _build_asset_class_in_clause(asset_classes, prefix="g_ac")
+        t_ac_sql, t_ac_params = _build_asset_class_in_clause(asset_classes, prefix="t_ac")
+        group_metrics_sql += f" AND tg.asset_class IN ({g_ac_sql})"
+        trade_metrics_sql += f" AND t.asset_class IN ({t_ac_sql})"
+        params.update(g_ac_params)
+        params.update(t_ac_params)
 
-    comm_params = _sqlite_safe_params(db, comm_params)
-    comm_row = db.execute(text(comm_query), comm_params).mappings().first()
+    query = f"""
+        WITH group_metrics AS (
+            {group_metrics_sql}
+        ),
+        trade_metrics AS (
+            {trade_metrics_sql}
+        )
+        SELECT
+            group_metrics.total_pnl,
+            trade_metrics.total_commissions,
+            trade_metrics.total_trades,
+            trade_metrics.trading_days,
+            group_metrics.win_count,
+            group_metrics.loss_count,
+            group_metrics.avg_win,
+            group_metrics.avg_loss
+        FROM group_metrics
+        CROSS JOIN trade_metrics
+    """
 
-    total_commissions = Decimal(str(comm_row["total_commissions"])) if comm_row else Decimal("0")
-    total_trades = int(comm_row["total_trades"]) if comm_row else 0
-    trading_days = int(comm_row["trading_days"]) if comm_row else 0
+    params = _sqlite_safe_params(db, params)
+    row = db.execute(text(query), params).mappings().first()
+
+    if not row:
+        row = {
+            "total_pnl": 0,
+            "total_commissions": 0,
+            "total_trades": 0,
+            "trading_days": 0,
+            "win_count": 0,
+            "loss_count": 0,
+            "avg_win": 0,
+            "avg_loss": 0,
+        }
+
+    total_pnl = Decimal(str(row["total_pnl"]))
+    total_commissions = Decimal(str(row["total_commissions"]))
+    total_trades = int(row["total_trades"])
+    trading_days = int(row["trading_days"])
+    win_count = int(row["win_count"])
+    loss_count = int(row["loss_count"])
+    avg_win = Decimal(str(row["avg_win"]))
+    avg_loss = Decimal(str(row["avg_loss"]))
 
     net_pnl = total_pnl - total_commissions
 
     total_decided = win_count + loss_count
     win_rate = (win_count / total_decided * 100) if total_decided > 0 else 0.0
 
-    # 盈亏比: 平均盈利 / |平均亏损|
     abs_avg_loss = abs(avg_loss)
     win_loss_ratio = float(avg_win / abs_avg_loss) if abs_avg_loss > 0 else None
 
-    # Expectancy: 基于每笔 round-trip 的平均期望值
-    # E = avg_win × win_rate + avg_loss × (1 - win_rate)
     if total_decided > 0:
         wr = Decimal(str(win_count)) / Decimal(str(total_decided))
         expectancy = avg_win * wr + avg_loss * (Decimal("1") - wr)

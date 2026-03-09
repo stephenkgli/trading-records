@@ -75,7 +75,6 @@ const LINE_WIDTHS = [1, 2, 3, 4] as const;
 
 interface DrawingToolbarProps {
   chart: Chart | null;
-  disabled?: boolean;
   /** Currently selected overlay ID (set by parent via onSelected callback). */
   selectedOverlayId: string | null;
   /** Called after "clear all" so parent can update persistence. */
@@ -88,18 +87,18 @@ interface DrawingToolbarProps {
 
 export default function DrawingToolbar({
   chart,
-  disabled = false,
   selectedOverlayId,
   onClearAll,
   onDeleteSelected,
   onStyleChange,
 }: DrawingToolbarProps) {
+  const isDisabled = !chart;
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [activeLineWidth, setActiveLineWidth] = useState<number | null>(null);
 
   function handleToolClick(overlayName: string) {
-    if (!chart || disabled) return;
+    if (!chart || isDisabled) return;
 
     if (activeTool === overlayName) {
       setActiveTool(null);
@@ -134,13 +133,13 @@ export default function DrawingToolbar({
   }
 
   function handleDeleteSelected() {
-    if (!chart || disabled || !selectedOverlayId) return;
+    if (!chart || isDisabled || !selectedOverlayId) return;
     chart.removeOverlay({ id: selectedOverlayId });
     onDeleteSelected?.();
   }
 
   function handleClearAll() {
-    if (!chart || disabled) return;
+    if (!chart || isDisabled) return;
     chart.removeOverlay({ groupId: "user-drawings" });
     setActiveTool(null);
     onClearAll?.();
@@ -157,7 +156,7 @@ export default function DrawingToolbar({
             <button
               key={tool.overlayName}
               type="button"
-              disabled={disabled}
+              disabled={isDisabled}
               onClick={() => handleToolClick(tool.overlayName)}
               className={`px-2.5 py-1.5 text-xs rounded transition-all ${
                 activeTool === tool.overlayName
@@ -222,7 +221,7 @@ export default function DrawingToolbar({
       {/* Actions */}
       <button
         type="button"
-        disabled={disabled || !hasSelection}
+        disabled={isDisabled || !hasSelection}
         onClick={handleDeleteSelected}
         className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
       >
@@ -231,7 +230,7 @@ export default function DrawingToolbar({
 
       <button
         type="button"
-        disabled={disabled}
+        disabled={isDisabled}
         onClick={handleClearAll}
         className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-red-400 border border-red-500/40 hover:bg-red-900/30 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
       >

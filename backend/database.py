@@ -7,11 +7,20 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from backend.config import settings
 
+is_postgresql = settings.database_url.startswith("postgresql")
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    pool_recycle=3600,
+    connect_args={
+        "connect_timeout": 10,
+        "options": "-c statement_timeout=60000",
+    }
+    if is_postgresql
+    else {},
 )
 
 SessionLocal = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)

@@ -87,9 +87,9 @@ class BaseIngester:
                     import_log.records_skipped_dup = skipped_count
                     import_log.records_imported = len(new_trades)
 
-                    # Insert new trade records
-                    for normalized in new_trades:
-                        trade_record = Trade(
+                    # Insert new trade records in batch
+                    trade_records = [
+                        Trade(
                             broker=normalized.broker,
                             broker_exec_id=normalized.broker_exec_id,
                             import_log_id=import_log.id,
@@ -108,7 +108,10 @@ class BaseIngester:
                             currency=normalized.currency,
                             raw_data=normalized.raw_data,
                         )
-                        db.add(trade_record)
+                        for normalized in new_trades
+                    ]
+                    if trade_records:
+                        db.add_all(trade_records)
 
                     # Determine status
                     if validation.failed_count > 0 and len(new_trades) > 0:

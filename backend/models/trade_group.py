@@ -20,6 +20,7 @@ class TradeGroup(Base):
     __table_args__ = (
         Index("idx_trade_groups_status", "status"),
         Index("idx_trade_groups_account_symbol", "account_id", "symbol"),
+        Index("idx_trade_groups_account_symbol_status", "account_id", "symbol", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

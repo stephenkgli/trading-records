@@ -18,6 +18,18 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    sourcemap: "hidden",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-table": ["@tanstack/react-table"],
+          "vendor-recharts": ["recharts"],
+          "vendor-klinecharts": ["klinecharts"],
+          "vendor-date-fns": ["date-fns"],
+        },
+      },
+    },
   },
 });

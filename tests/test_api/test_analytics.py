@@ -36,6 +36,19 @@ class TestAnalyticsDaily:
         )
         assert response.status_code == 200
 
+    def test_daily_with_asset_classes_filter(self, client, db_session, seed_analytics_data):
+        """Should support filtering by asset_classes query param."""
+        seed_analytics_data()
+        response = client.get("/api/v1/analytics/daily?asset_classes=stock")
+        assert response.status_code == 200
+
+    def test_daily_with_empty_asset_classes_returns_empty(self, client, db_session, seed_analytics_data):
+        """Empty asset_classes selection should return empty list."""
+        seed_analytics_data()
+        response = client.get("/api/v1/analytics/daily?asset_classes=")
+        assert response.status_code == 200
+        assert response.json() == []
+
     def test_daily_returns_expected_values(self, client, db_session, seed_analytics_data):
         """Daily summaries should fall back to trades in SQLite and compute P&L."""
         seed_analytics_data()
@@ -170,4 +183,10 @@ class TestAnalyticsPerformance:
         response = client.get(
             "/api/v1/analytics/performance?from=2025-01-15&to=2025-01-17",
         )
+        assert response.status_code == 200
+
+    def test_performance_with_asset_classes_filter(self, client, db_session, seed_analytics_data):
+        """Performance metrics should support asset_classes filtering."""
+        seed_analytics_data()
+        response = client.get("/api/v1/analytics/performance?asset_classes=stock")
         assert response.status_code == 200

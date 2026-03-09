@@ -20,6 +20,7 @@ class Trade(Base):
     __table_args__ = (
         Index("idx_trades_executed_at", "executed_at"),
         Index("idx_trades_symbol_executed_at", "symbol", "executed_at"),
+        Index("idx_trades_account_symbol_executed_at", "account_id", "symbol", "executed_at"),
         Index("idx_trades_broker_account", "broker", "account_id"),
         Index("idx_trades_broker_exec_id", "broker", "broker_exec_id", unique=True),
         Index("idx_trades_import_log_id", "import_log_id"),

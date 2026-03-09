@@ -94,11 +94,11 @@ export default function PnLCalendar() {
               title={hasData ? `$${pnl.toFixed(2)} (${cell.entry!.trade_count} trades)` : ""}
             >
               <span className="text-gray-600">{cell.day}</span>
-              {hasData && (
+              {hasData ? (
                 <span className={`text-[10px] font-medium ${pnl >= 0 ? "text-green-700" : "text-red-700"}`}>
                   ${Math.abs(pnl).toFixed(0)}
                 </span>
-              )}
+              ) : null}
             </div>
           );
         })}
