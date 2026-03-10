@@ -61,10 +61,8 @@ interface Props {
 export default function DateRangeSelector({ value, onChange }: Props) {
   const [activePreset, setActivePreset] = useState<PresetKey>("all");
 
-  // 当预设不是 custom 时，自定义日期输入框不展示
   const showCustomInputs = activePreset === "custom";
 
-  // 预设按钮点击
   const handlePresetClick = (key: PresetKey) => {
     setActivePreset(key);
     if (key !== "custom") {
@@ -72,7 +70,6 @@ export default function DateRangeSelector({ value, onChange }: Props) {
     }
   };
 
-  // 自定义日期变更
   const handleFromChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange({ ...value, from: e.target.value || undefined });
   };
@@ -81,7 +78,6 @@ export default function DateRangeSelector({ value, onChange }: Props) {
     onChange({ ...value, to: e.target.value || undefined });
   };
 
-  // 显示当前时间范围的描述
   const rangeDescription = useMemo(() => {
     if (!value.from && !value.to) return "All time";
     if (value.from && value.to) return `${value.from} — ${value.to}`;
@@ -91,17 +87,16 @@ export default function DateRangeSelector({ value, onChange }: Props) {
 
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-      {/* 预设按钮组 */}
-      <div className="flex rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+      <div className="flex rounded-lg border border-[--color-border] bg-elevated overflow-hidden">
         {PRESETS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => handlePresetClick(key)}
-            className={`px-3 py-1.5 text-xs font-medium transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none
+            className={`px-3 py-1.5 text-xs font-medium transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none
               ${
                 activePreset === key
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-accent text-white"
+                  : "text-[--color-text-secondary] hover:bg-[--color-bg-hover] hover:text-[--color-text-primary]"
               }
             `}
           >
@@ -110,7 +105,6 @@ export default function DateRangeSelector({ value, onChange }: Props) {
         ))}
       </div>
 
-      {/* 自定义日期输入 */}
       {showCustomInputs && (
         <div className="flex items-center gap-2">
           <input
@@ -120,9 +114,9 @@ export default function DateRangeSelector({ value, onChange }: Props) {
             aria-label="Start date"
             value={value.from ?? ""}
             onChange={handleFromChange}
-            className="border border-gray-300 rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
+            className="bg-elevated border border-[--color-border] rounded-md px-2 py-1 text-xs text-[--color-text-primary] outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent"
           />
-          <span className="text-gray-400 text-xs">to</span>
+          <span className="text-[--color-text-muted] text-xs">to</span>
           <input
             type="date"
             name="date-to"
@@ -130,13 +124,12 @@ export default function DateRangeSelector({ value, onChange }: Props) {
             aria-label="End date"
             value={value.to ?? ""}
             onChange={handleToChange}
-            className="border border-gray-300 rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
+            className="bg-elevated border border-[--color-border] rounded-md px-2 py-1 text-xs text-[--color-text-primary] outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent"
           />
         </div>
       )}
 
-      {/* 当前范围描述 */}
-      <span className="text-xs text-gray-400 hidden sm:inline">{rangeDescription}</span>
+      <span className="text-xs text-[--color-text-muted] hidden sm:inline">{rangeDescription}</span>
     </div>
   );
 }

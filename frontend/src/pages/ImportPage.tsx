@@ -8,16 +8,10 @@ import {
   type ImportLog,
 } from "../api/client";
 
-function getStatusTextClass(status: string): string {
-  if (status === "success") return "text-green-600";
-  if (status === "failed") return "text-red-600";
-  return "text-yellow-600";
-}
-
 function getStatusBadgeClass(status: string): string {
-  if (status === "success") return "bg-green-100 text-green-700";
-  if (status === "failed") return "bg-red-100 text-red-700";
-  return "bg-yellow-100 text-yellow-700";
+  if (status === "success") return "bg-profit-subtle text-profit";
+  if (status === "failed") return "bg-loss-subtle text-loss";
+  return "bg-[--color-warning-subtle] text-[--color-warning]";
 }
 
 function formatDateTime(value: string): string {
@@ -30,7 +24,7 @@ function formatDateTime(value: string): string {
 function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getStatusBadgeClass(status)}`}
+      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(status)}`}
     >
       {status}
     </span>
@@ -39,78 +33,59 @@ function StatusBadge({ status }: { status: string }) {
 
 function LastImportResultCard({ result }: { result: BatchImportResponse }) {
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-4">
-      <h2 className="text-lg font-medium">Last Import Result</h2>
+    <div className="bg-surface rounded-lg border border-[--color-border] p-6 space-y-4">
+      <h2 className="text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Last Import Result</h2>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
         <div>
-          <span className="text-gray-500">Batch Status</span>
-          <p className={`font-medium ${getStatusTextClass(result.aggregate.status)}`}>
-            {result.aggregate.status}
-          </p>
+          <span className="text-[--color-text-muted] text-[10px] uppercase tracking-widest block mb-1">Status</span>
+          <StatusBadge status={result.aggregate.status} />
         </div>
         <div>
-          <span className="text-gray-500">Files</span>
-          <p className="font-medium">{result.aggregate.files_total}</p>
+          <span className="text-[--color-text-muted] text-[10px] uppercase tracking-widest block mb-1">Files</span>
+          <p className="font-medium font-mono text-[--color-text-primary]">{result.aggregate.files_total}</p>
         </div>
         <div>
-          <span className="text-gray-500">Imported</span>
-          <p className="font-medium text-green-600">
-            {result.aggregate.records_imported}
-          </p>
+          <span className="text-[--color-text-muted] text-[10px] uppercase tracking-widest block mb-1">Imported</span>
+          <p className="font-medium font-mono text-profit">{result.aggregate.records_imported}</p>
         </div>
         <div>
-          <span className="text-gray-500">Skipped (dup)</span>
-          <p className="font-medium text-gray-600">
-            {result.aggregate.records_skipped_dup}
-          </p>
+          <span className="text-[--color-text-muted] text-[10px] uppercase tracking-widest block mb-1">Skipped</span>
+          <p className="font-medium font-mono text-[--color-text-secondary]">{result.aggregate.records_skipped_dup}</p>
         </div>
         <div>
-          <span className="text-gray-500">Failed</span>
-          <p className="font-medium text-red-600">{result.aggregate.records_failed}</p>
+          <span className="text-[--color-text-muted] text-[10px] uppercase tracking-widest block mb-1">Failed</span>
+          <p className="font-medium font-mono text-loss">{result.aggregate.records_failed}</p>
         </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                File
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Status
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Total
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Imported
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Skipped
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Failed
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Error
-              </th>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-[--color-border]">
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">File</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Status</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Total</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Imported</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Skipped</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Failed</th>
+              <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Error</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {result.files.map((fileResult) => (
-              <tr key={`${fileResult.filename}-${fileResult.import_log_id ?? "none"}`}>
-                <td className="px-3 py-2">{fileResult.filename}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={fileResult.status} />
-                </td>
-                <td className="px-3 py-2">{fileResult.records_total}</td>
-                <td className="px-3 py-2">{fileResult.records_imported}</td>
-                <td className="px-3 py-2">{fileResult.records_skipped_dup}</td>
-                <td className="px-3 py-2">{fileResult.records_failed}</td>
-                <td className="px-3 py-2 text-red-600">
-                  {fileResult.file_error ?? "-"}
+              <tr
+                key={`${fileResult.filename}-${fileResult.import_log_id ?? "none"}`}
+                className="border-b border-[--color-border]"
+              >
+                <td className="px-3 py-2 text-[--color-text-primary]">{fileResult.filename}</td>
+                <td className="px-3 py-2"><StatusBadge status={fileResult.status} /></td>
+                <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{fileResult.records_total}</td>
+                <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{fileResult.records_imported}</td>
+                <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{fileResult.records_skipped_dup}</td>
+                <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{fileResult.records_failed}</td>
+                <td className="px-3 py-2 text-loss text-xs">
+                  {fileResult.file_error ?? <span className="text-[--color-text-muted]">&mdash;</span>}
                 </td>
               </tr>
             ))}
@@ -123,62 +98,48 @@ function LastImportResultCard({ result }: { result: BatchImportResponse }) {
 
 function ImportHistoryTable({ logs }: { logs: ImportLog[] }) {
   return (
-    <table className="min-w-full divide-y divide-gray-200 text-sm">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Date
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Broker
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Trade Period
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Status
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Imported
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Skipped
-          </th>
-          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-            Failed
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-200">
-        {logs.map((log) => (
-          <tr key={log.id}>
-            <td className="px-3 py-2">{formatDateTime(log.started_at)}</td>
-            <td className="px-3 py-2">
-              <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                {log.broker || log.source}
-              </span>
-            </td>
-            <td className="px-3 py-2 text-xs text-gray-600">
-              {log.trade_date_from && log.trade_date_to ? (
-                <>
-                  {formatDateTime(log.trade_date_from)}
-                  <span className="mx-1">→</span>
-                  {formatDateTime(log.trade_date_to)}
-                </>
-              ) : (
-                <span className="text-gray-400">—</span>
-              )}
-            </td>
-            <td className="px-3 py-2">
-              <StatusBadge status={log.status} />
-            </td>
-            <td className="px-3 py-2">{log.records_imported}</td>
-            <td className="px-3 py-2">{log.records_skipped_dup}</td>
-            <td className="px-3 py-2">{log.records_failed}</td>
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="border-b border-[--color-border]">
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Date</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Broker</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Trade Period</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Status</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Imported</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Skipped</th>
+            <th className="px-3 py-2 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest">Failed</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {logs.map((log, i) => (
+            <tr key={log.id} className={`border-b border-[--color-border] ${i % 2 === 1 ? "bg-[rgba(255,255,255,0.015)]" : ""}`}>
+              <td className="px-3 py-2 text-[--color-text-secondary] text-xs">{formatDateTime(log.started_at)}</td>
+              <td className="px-3 py-2">
+                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-accent-subtle text-accent-hover">
+                  {log.broker || log.source}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-xs text-[--color-text-secondary]">
+                {log.trade_date_from && log.trade_date_to ? (
+                  <span className="font-mono">
+                    {formatDateTime(log.trade_date_from)}
+                    <span className="mx-1 text-[--color-text-muted]">&rarr;</span>
+                    {formatDateTime(log.trade_date_to)}
+                  </span>
+                ) : (
+                  <span className="text-[--color-text-muted]">&mdash;</span>
+                )}
+              </td>
+              <td className="px-3 py-2"><StatusBadge status={log.status} /></td>
+              <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{log.records_imported}</td>
+              <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{log.records_skipped_dup}</td>
+              <td className="px-3 py-2 font-mono text-[--color-text-secondary]">{log.records_failed}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -200,17 +161,17 @@ export default function ImportPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Import Data</h1>
+    <div className="stagger-in space-y-5">
+      <h1 className="font-display text-3xl text-[--color-text-primary] tracking-tight">Import Data</h1>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-medium mb-4">CSV Upload</h2>
+      <div className="bg-surface rounded-lg border border-[--color-border] p-6">
+        <h2 className="text-[10px] font-medium text-[--color-text-muted] mb-4 uppercase tracking-widest">CSV Upload</h2>
         <CsvUpload
           onUpload={(files) => csvMutation.mutate(files)}
           isLoading={csvMutation.isPending}
         />
         {csvMutation.error && (
-          <p className="mt-2 text-sm text-red-500">
+          <p className="mt-2 text-sm text-loss">
             {(csvMutation.error as Error).message}
           </p>
         )}
@@ -218,12 +179,19 @@ export default function ImportPage() {
 
       {lastResult && <LastImportResultCard result={lastResult} />}
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-medium mb-3">Import History</h2>
+      <div className="bg-surface rounded-lg border border-[--color-border] p-6">
+        <h2 className="text-[10px] font-medium text-[--color-text-muted] mb-3 uppercase tracking-widest">Import History</h2>
         {logsData && logsData.logs.length > 0 ? (
           <ImportHistoryTable logs={logsData.logs} />
         ) : (
-          <p className="text-gray-400 text-sm">No imports yet</p>
+          <div className="flex flex-col items-center py-8 gap-2">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <p className="text-[--color-text-muted] text-sm">No imports yet</p>
+          </div>
         )}
       </div>
     </div>

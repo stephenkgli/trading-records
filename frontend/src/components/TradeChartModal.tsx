@@ -13,8 +13,8 @@ interface Props {
 
 const chartLoadingSkeleton = (
   <div className="flex flex-col gap-2">
-    <div className="h-[320px] bg-gray-800 animate-pulse rounded" />
-    <div className="h-[72px] bg-gray-800 animate-pulse rounded" />
+    <div className="h-[320px] bg-elevated animate-pulse rounded" />
+    <div className="h-[72px] bg-elevated animate-pulse rounded" />
   </div>
 );
 
@@ -24,19 +24,19 @@ function pnlDisplay(pnl: number | string | null | undefined): {
   className: string;
 } {
   if (pnl === null || pnl === undefined || pnl === "open") {
-    return { text: "open", className: "text-gray-400" };
+    return { text: "open", className: "text-[--color-text-muted]" };
   }
   const num = typeof pnl === "string" ? parseFloat(pnl) : pnl;
   if (isNaN(num)) {
-    return { text: String(pnl), className: "text-gray-400" };
+    return { text: String(pnl), className: "text-[--color-text-muted]" };
   }
   if (num > 0) {
-    return { text: `+${num}`, className: "text-green-400" };
+    return { text: `+${num}`, className: "text-profit" };
   }
   if (num < 0) {
-    return { text: String(num), className: "text-red-400" };
+    return { text: String(num), className: "text-loss" };
   }
-  return { text: "0", className: "text-gray-400" };
+  return { text: "0", className: "text-[--color-text-muted]" };
 }
 
 export default function TradeChartModal({ groupId, onClose }: Props) {
@@ -65,6 +65,7 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        e.stopImmediatePropagation();
         onClose();
         return;
       }
@@ -80,8 +81,8 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onClose]);
 
   /** Save overlays after style change (not captured by overlay event callbacks). */
@@ -97,17 +98,17 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="Trade chart"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fadeIn"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 animate-fadeIn backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="bg-[#1e1e2f] rounded-lg shadow-2xl max-w-[920px] w-[95vw] max-h-[90vh] overflow-hidden animate-scaleIn"
+        className="bg-surface rounded-lg shadow-2xl max-w-[920px] w-[95vw] max-h-[90vh] overflow-hidden animate-scaleIn border border-[--color-border]"
         style={{ overscrollBehavior: "contain" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[--color-border]">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-100">
+            <h2 className="text-lg font-semibold text-[--color-text-primary]">
               {data?.symbol ?? "Loading\u2026"}
             </h2>
             {data?.group && (
@@ -115,14 +116,14 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     data.group.direction === "long"
-                      ? "bg-green-900/50 text-green-400"
-                      : "bg-red-900/50 text-red-400"
+                      ? "bg-profit-subtle text-profit"
+                      : "bg-loss-subtle text-loss"
                   }`}
                 >
                   {data.group.direction.toUpperCase()}
                 </span>
                 {pnl && (
-                  <span className={`text-sm font-medium ${pnl.className}`}>
+                  <span className={`text-sm font-medium font-mono ${pnl.className}`}>
                     P&L: {pnl.text}
                   </span>
                 )}
@@ -132,18 +133,18 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-[color,background-color] text-xl leading-none"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-[--color-text-muted] hover:text-[--color-text-primary] hover:bg-[--color-bg-hover] transition-all duration-150 text-xl leading-none"
           >
             &times;
           </button>
         </div>
 
-        <div className="p-4 bg-[#1a1a2e]">
+        <div className="p-4 bg-[--color-bg-primary]">
           {isLoading && chartLoadingSkeleton}
           {error && (
-            <div className="flex flex-col items-center justify-center h-[400px] text-red-400 gap-2">
+            <div className="flex flex-col items-center justify-center h-[400px] text-loss gap-2">
               <span>Failed to load chart data</span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-[--color-text-muted]">
                 Unable to fetch K-line data for this symbol. The data source may
                 be temporarily unavailable, or historical data for this interval
                 may not exist.

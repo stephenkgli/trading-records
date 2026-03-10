@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 
-/** 资产类型的显示名称映射 */
 const ASSET_CLASS_LABELS: Record<string, string> = {
   stock: "Stock",
   future: "Future",
@@ -12,16 +12,15 @@ const ASSET_CLASS_LABELS: Record<string, string> = {
   crypto: "Crypto",
 };
 
-/** 资产类型的图标/颜色标记 */
 const ASSET_CLASS_COLORS: Record<string, string> = {
-  stock: "bg-blue-100 text-blue-700",
-  future: "bg-orange-100 text-orange-700",
-  option: "bg-purple-100 text-purple-700",
-  forex: "bg-green-100 text-green-700",
-  etf: "bg-cyan-100 text-cyan-700",
-  bond: "bg-gray-100 text-gray-700",
-  fund: "bg-pink-100 text-pink-700",
-  crypto: "bg-yellow-100 text-yellow-700",
+  stock: "bg-[rgba(59,130,246,0.15)] text-[#60a5fa]",
+  future: "bg-[rgba(249,115,22,0.15)] text-[#fb923c]",
+  option: "bg-[rgba(168,85,247,0.15)] text-[#c084fc]",
+  forex: "bg-profit-subtle text-profit",
+  etf: "bg-[rgba(34,211,238,0.15)] text-[#22d3ee]",
+  bond: "bg-elevated text-[--color-text-secondary]",
+  fund: "bg-[rgba(236,72,153,0.15)] text-[#f472b6]",
+  crypto: "bg-[rgba(250,204,21,0.15)] text-[#facc15]",
 };
 
 function getLabel(ac: string): string {
@@ -29,15 +28,12 @@ function getLabel(ac: string): string {
 }
 
 function getColorClass(ac: string): string {
-  return ASSET_CLASS_COLORS[ac] || "bg-gray-100 text-gray-700";
+  return ASSET_CLASS_COLORS[ac] || "bg-elevated text-[--color-text-secondary]";
 }
 
 interface Props {
-  /** 所有可用资产类型列表（来自后端） */
   availableAssetClasses: string[];
-  /** 当前选中的资产类型列表（空数组表示未选任何项） */
   selectedAssetClasses: string[];
-  /** 选中变化回调 */
   onChange: (assetClasses: string[]) => void;
 }
 
@@ -47,55 +43,65 @@ export default function AssetClassFilter({
   onChange,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
-  // 点击外部关闭下拉
+  // Position dropdown below button when opened
   useEffect(() => {
+    if (open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+  }, [open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        buttonRef.current && !buttonRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [open]);
 
-  // 是否全选状态：选中数量等于全部可用数量
   const isAllSelected =
     availableAssetClasses.length > 0 &&
     selectedAssetClasses.length === availableAssetClasses.length;
 
-  // 是否未选中任何项
   const isNoneSelected = selectedAssetClasses.length === 0;
 
-  // 当前激活的资产类型集合
   const activeSet = useMemo(
     () => new Set(selectedAssetClasses),
     [selectedAssetClasses],
   );
 
-  const handleToggle = (ac: string) => {
+  const handleToggle = useCallback((ac: string) => {
     if (activeSet.has(ac)) {
-      // 取消勾选：直接移除，允许全部取消
       const newList = selectedAssetClasses.filter((s) => s !== ac);
       onChange(newList);
     } else {
-      // 勾选：添加
       onChange([...selectedAssetClasses, ac]);
     }
-  };
+  }, [activeSet, selectedAssetClasses, onChange]);
 
-  const handleSelectAll = () => {
-    // 只有点击 Select All 按钮时才全选
+  const handleSelectAll = useCallback(() => {
     onChange([...availableAssetClasses]);
-  };
+  }, [availableAssetClasses, onChange]);
 
-  const handleClearAll = () => {
-    // 清除所有选中
+  const handleClearAll = useCallback(() => {
     onChange([]);
-  };
+  }, [onChange]);
 
-  // 显示标签文本
   const displayLabel = isAllSelected
     ? "All Types"
     : isNoneSelected
@@ -105,18 +111,18 @@ export default function AssetClassFilter({
         : `${selectedAssetClasses.length} Types`;
 
   return (
-    <div ref={containerRef} className="relative">
-      {/* 触发按钮 */}
+    <div className="relative">
       <button
+        ref={buttonRef}
         onClick={() => setOpen(!open)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label="Filter by asset class"
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none
           ${
             isAllSelected || isNoneSelected
-              ? "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
-              : "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              ? "border-[--color-border] bg-elevated text-[--color-text-secondary] hover:bg-[--color-bg-hover]"
+              : "border-accent/40 bg-accent-subtle text-accent-hover hover:bg-accent/20"
           }
         `}
       >
@@ -151,39 +157,38 @@ export default function AssetClassFilter({
         </svg>
       </button>
 
-      {/* 下拉面板 */}
-      {open && (
+      {open && createPortal(
         <div
-          className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
+          ref={dropdownRef}
+          className="fixed w-56 bg-surface rounded-lg shadow-lg border border-[--color-border] z-[100] backdrop-blur-xl"
+          style={dropdownStyle}
           onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
         >
-          {/* 全选/清除按钮 */}
-          <div className="flex gap-2 px-3 py-2 border-b border-gray-100">
+          <div className="flex gap-2 px-3 py-2 border-b border-[--color-border]">
             <button
               onClick={handleSelectAll}
-              className={`text-xs px-2 py-0.5 rounded transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
+              className={`text-xs px-2 py-0.5 rounded transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
                 isAllSelected
-                  ? "bg-blue-100 text-blue-700"
-                  : "text-blue-600 hover:bg-blue-50"
+                  ? "bg-accent-subtle text-accent-hover"
+                  : "text-accent hover:bg-accent-subtle"
               }`}
             >
               Select All
             </button>
             <button
               onClick={handleClearAll}
-              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded hover:bg-gray-50 transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+              className="text-xs text-[--color-text-muted] hover:text-[--color-text-primary] px-2 py-0.5 rounded hover:bg-[--color-bg-hover] transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
             >
               Clear
             </button>
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="ml-auto text-xs text-[--color-text-muted]">
               {selectedAssetClasses.length}/{availableAssetClasses.length}
             </span>
           </div>
 
-          {/* 资产类型列表 */}
           <div className="py-1">
             {availableAssetClasses.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-3">
+              <p className="text-xs text-[--color-text-muted] text-center py-3">
                 No asset classes found
               </p>
             ) : (
@@ -192,13 +197,13 @@ export default function AssetClassFilter({
                 return (
                   <label
                     key={ac}
-                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-[--color-bg-hover] cursor-pointer transition-colors"
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => handleToggle(ac)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="w-3.5 h-3.5 rounded border-[--color-border-strong] text-accent focus:ring-accent bg-elevated"
                     />
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColorClass(ac)}`}
@@ -210,7 +215,8 @@ export default function AssetClassFilter({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

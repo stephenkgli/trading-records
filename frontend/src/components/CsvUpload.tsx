@@ -50,10 +50,10 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${
           dragActive
-            ? "border-blue-400 bg-blue-50"
-            : "border-gray-300 hover:border-gray-400"
+            ? "border-accent bg-accent-subtle scale-[1.01]"
+            : "border-[--color-border-strong] hover:border-accent/40 hover:bg-[rgba(99,102,241,0.04)]"
         }`}
       >
         <input
@@ -67,12 +67,21 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
           multiple
         />
         <label htmlFor="csv-upload" className="cursor-pointer">
-          <p className="text-gray-600">
+          <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center transition-colors duration-200 ${
+            dragActive ? "bg-accent/20" : "bg-accent-subtle"
+          }`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <p className="text-[--color-text-primary] text-sm">
             {selectedFiles.length > 0
               ? `Selected ${selectedFiles.length} file(s)`
               : "Drag and drop CSV files here, or click to browse\u2026"}
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-[--color-text-muted] mt-1">
             Supports IBKR Activity Statement CSV, Tradovate CSV exports, and
             Tradovate Performance reports
           </p>
@@ -80,13 +89,23 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
       </div>
 
       {selectedFiles.length > 0 && (
-        <button
-          onClick={handleSubmit}
-          disabled={isLoading}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity]"
-        >
-          {isLoading ? "Importing\u2026" : `Import ${selectedFiles.length} file(s)`}
-        </button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {selectedFiles.map((f, i) => (
+              <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-elevated border border-[--color-border] text-xs text-[--color-text-secondary]">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><polyline points="13 2 13 9 20 9" /></svg>
+                {f.name}
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={isLoading}
+            className="w-full bg-accent text-white py-2.5 px-4 rounded-lg font-medium hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[--color-bg-surface] focus-visible:outline-none"
+          >
+            {isLoading ? "Importing\u2026" : `Import ${selectedFiles.length} file(s)`}
+          </button>
+        </div>
       )}
     </div>
   );

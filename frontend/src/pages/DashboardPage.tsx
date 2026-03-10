@@ -5,30 +5,46 @@ import EquityCurve from "../components/EquityCurve";
 import PnLCalendar from "../components/PnLCalendar";
 
 export default function DashboardPage() {
-  const { data: metrics } = useQuery({
+  const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ["performance"],
     queryFn: () => fetchPerformance(),
   });
 
-  const { data: dailyData } = useQuery({
+  const { data: dailyData, isLoading: dailyLoading } = useQuery({
     queryKey: ["dailySummaries"],
     queryFn: () => fetchDailySummaries(),
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+    <div className="stagger-in space-y-5">
+      <h1 className="font-display text-3xl text-[--color-text-primary] tracking-tight">Dashboard</h1>
 
-      {metrics && <MetricsCards metrics={metrics} />}
+      {metricsLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-surface rounded-lg border border-[--color-border] p-4 h-[88px] animate-pulse" />
+          ))}
+        </div>
+      ) : metrics ? (
+        <MetricsCards metrics={metrics} />
+      ) : null}
 
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">P&L Calendar</h2>
-        <PnLCalendar />
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        <div className="lg:col-span-3 bg-surface rounded-lg border border-[--color-border] p-5">
+          <h2 className="text-xs font-medium text-[--color-text-muted] mb-4 uppercase tracking-widest">P&L Calendar</h2>
+          <PnLCalendar />
+        </div>
 
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">Equity Curve</h2>
-        {dailyData && <EquityCurve data={dailyData} />}
+        <div className="lg:col-span-2 bg-surface rounded-lg border border-[--color-border] p-5 flex flex-col">
+          <h2 className="text-xs font-medium text-[--color-text-muted] mb-4 uppercase tracking-widest">Equity Curve</h2>
+          <div className="flex-1 min-h-0">
+            {dailyLoading ? (
+              <div className="h-[250px] bg-elevated animate-pulse rounded" />
+            ) : dailyData ? (
+              <EquityCurve data={dailyData} />
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );

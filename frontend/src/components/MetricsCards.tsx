@@ -11,38 +11,70 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
       {
         label: "Net P&L",
         value: new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(metrics.net_pnl)),
-        color: Number(metrics.net_pnl) >= 0 ? "text-green-600" : "text-red-600",
+        sentiment: Number(metrics.net_pnl) >= 0 ? "profit" : "loss",
+        hero: true,
       },
       {
         label: "Win Rate",
         value: `${metrics.win_rate}%`,
-        color: metrics.win_rate >= 50 ? "text-green-600" : "text-red-600",
+        sentiment: metrics.win_rate >= 50 ? "profit" : "loss",
+        hero: false,
       },
       {
         label: "Win/Loss Ratio",
         value: metrics.win_loss_ratio !== null ? String(metrics.win_loss_ratio) : "N/A",
-        color:
+        sentiment:
           metrics.win_loss_ratio !== null && metrics.win_loss_ratio >= 1
-            ? "text-green-600"
-            : "text-red-600",
+            ? "profit"
+            : "loss",
+        hero: false,
       },
       {
         label: "Total Trades",
-        value: String(metrics.total_trades),
-        color: "text-gray-900",
+        value: new Intl.NumberFormat().format(metrics.total_trades),
+        sentiment: "neutral" as const,
+        hero: false,
       },
     ],
     [metrics.net_pnl, metrics.win_rate, metrics.win_loss_ratio, metrics.total_trades],
   );
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {cards.map((card) => (
-        <div key={card.label} className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm text-gray-500">{card.label}</p>
-          <p className={`text-2xl font-bold ${card.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{card.value}</p>
-        </div>
-      ))}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {cards.map((card, i) => {
+        const colorClass =
+          card.sentiment === "profit"
+            ? "text-profit"
+            : card.sentiment === "loss"
+              ? "text-loss"
+              : "text-[--color-text-primary]";
+
+        const glowClass =
+          card.hero && card.sentiment === "profit"
+            ? "card-glow-profit"
+            : card.hero && card.sentiment === "loss"
+              ? "card-glow-loss"
+              : "";
+
+        return (
+          <div
+            key={card.label}
+            className={`bg-surface rounded-lg border border-[--color-border] p-4 transition-all duration-300 hover:border-[--color-border-strong] hover:bg-elevated ${glowClass} ${card.hero ? "lg:row-span-1" : ""}`}
+            style={{ animationDelay: `${i * 60}ms` }}
+          >
+            <p className="text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest mb-2">{card.label}</p>
+            <p
+              className={`${card.hero ? "text-3xl font-display" : "text-xl"} font-semibold ${colorClass} font-mono leading-tight`}
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {card.value}
+            </p>
+            {card.hero && (
+              <div className={`mt-2 h-0.5 w-12 rounded-full ${card.sentiment === "profit" ? "bg-profit/40" : "bg-loss/40"}`} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

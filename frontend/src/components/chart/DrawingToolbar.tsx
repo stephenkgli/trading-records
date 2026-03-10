@@ -25,30 +25,30 @@ const TOOL_GROUPS: readonly { readonly tools: readonly DrawingTool[] }[] = [
   {
     // Lines
     tools: [
-      { label: "趋势线", overlayName: "segment" },
-      { label: "射线", overlayName: "rayLine" },
-      { label: "直线", overlayName: "straightLine" },
+      { label: "Trend", overlayName: "segment" },
+      { label: "Ray", overlayName: "rayLine" },
+      { label: "Line", overlayName: "straightLine" },
     ],
   },
   {
     // Guides
     tools: [
-      { label: "水平线", overlayName: "horizontalStraightLine" },
-      { label: "垂直线", overlayName: "verticalStraightLine" },
+      { label: "H.Line", overlayName: "horizontalStraightLine" },
+      { label: "V.Line", overlayName: "verticalStraightLine" },
     ],
   },
   {
     // Channels
     tools: [
-      { label: "平行线", overlayName: "parallelStraightLine" },
-      { label: "价格通道", overlayName: "priceChannelLine" },
+      { label: "Parallel", overlayName: "parallelStraightLine" },
+      { label: "Channel", overlayName: "priceChannelLine" },
     ],
   },
   {
     // Analysis
     tools: [
-      { label: "斐波那契", overlayName: "fibonacciLine" },
-      { label: "价格线", overlayName: "priceLine" },
+      { label: "Fibonacci", overlayName: "fibonacciLine" },
+      { label: "Price", overlayName: "priceLine" },
     ],
   },
 ] as const;
@@ -227,7 +227,7 @@ export default function DrawingToolbar({
         onClick={handleDeleteSelected}
         className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
       >
-        删除选中
+        Delete
       </button>
 
       <button
@@ -236,7 +236,7 @@ export default function DrawingToolbar({
         onClick={handleClearAll}
         className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-red-400 border border-red-500/40 hover:bg-red-900/30 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
       >
-        清除全部
+        Clear All
       </button>
     </div>
   );

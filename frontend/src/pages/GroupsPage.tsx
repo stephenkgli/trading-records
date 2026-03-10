@@ -87,12 +87,13 @@ export default function GroupsPage() {
         cell: ({ row, table }) =>
           ((table.options.meta as GroupsTableMeta | undefined)?.pageOffset ?? 0) + row.index + 1,
         enableSorting: false,
+        size: 48,
       },
       {
         accessorKey: "symbol",
         header: "Symbol",
         cell: ({ getValue }) => (
-          <span className="font-medium">{getValue() as string}</span>
+          <span className="font-medium text-[--color-text-primary]">{getValue() as string}</span>
         ),
       },
       {
@@ -101,7 +102,13 @@ export default function GroupsPage() {
         cell: ({ getValue }) => {
           const dir = getValue() as string;
           return (
-            <span className={dir === "long" ? "text-green-600" : "text-red-600"}>
+            <span
+              className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                dir === "long"
+                  ? "bg-profit-subtle text-profit"
+                  : "bg-loss-subtle text-loss"
+              }`}
+            >
               {dir.toUpperCase()}
             </span>
           );
@@ -114,10 +121,10 @@ export default function GroupsPage() {
           const status = getValue() as string;
           return (
             <span
-              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+              className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                 status === "open"
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-gray-100 text-gray-700"
+                  ? "bg-accent-subtle text-accent-hover"
+                  : "bg-elevated text-[--color-text-secondary]"
               }`}
             >
               {status}
@@ -128,13 +135,17 @@ export default function GroupsPage() {
       {
         accessorKey: "realized_pnl",
         header: "P&L",
+        size: 120,
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
-          if (val === null) return <span className="text-gray-400">-</span>;
+          if (val === null) return <span className="text-[--color-text-muted]">&mdash;</span>;
           const num = Number(val);
           return (
-            <span className={num >= 0 ? "text-green-600" : "text-red-600"} style={{ fontVariantNumeric: "tabular-nums" }}>
-              ${num.toFixed(2)}
+            <span
+              className={`font-mono font-medium ${num >= 0 ? "text-profit" : "text-loss"}`}
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {num >= 0 ? "+" : ""}${num.toFixed(2)}
             </span>
           );
         },
@@ -142,14 +153,18 @@ export default function GroupsPage() {
       {
         accessorKey: "opened_at",
         header: "Opened",
-        cell: ({ getValue }) => formatDateTime(getValue() as string),
+        cell: ({ getValue }) => (
+          <span className="text-[--color-text-secondary] text-xs">{formatDateTime(getValue() as string)}</span>
+        ),
       },
       {
         accessorKey: "closed_at",
         header: "Closed",
         cell: ({ getValue }) => {
           const val = getValue() as string | null;
-          return formatDateTime(val);
+          return (
+            <span className="text-[--color-text-secondary] text-xs">{formatDateTime(val)}</span>
+          );
         },
       },
 
@@ -173,11 +188,13 @@ export default function GroupsPage() {
     meta: { pageOffset },
   });
 
+  const totalPages = data ? Math.ceil(data.total / (data.per_page ?? 50)) : 0;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Trade Groups</h1>
-        <div className="flex items-center space-x-2">
+    <div className="stagger-in space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="font-display text-3xl text-[--color-text-primary] tracking-tight">Trade Groups</h1>
+        <div className="flex flex-wrap items-center gap-2">
           <AssetClassFilter
             availableAssetClasses={availableAssetClasses}
             selectedAssetClasses={selectedAssetClasses ?? []}
@@ -185,7 +202,7 @@ export default function GroupsPage() {
           />
           <select
             aria-label="Filter by status"
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+            className="bg-elevated border border-[--color-border] rounded-lg px-3 py-1.5 text-sm text-[--color-text-secondary] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
@@ -199,7 +216,7 @@ export default function GroupsPage() {
           <button
             onClick={() => recomputeMutation.mutate()}
             disabled={recomputeMutation.isPending}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+            className="bg-accent text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
             {recomputeMutation.isPending ? "Recomputing\u2026" : "Recompute"}
           </button>
@@ -207,111 +224,133 @@ export default function GroupsPage() {
       </div>
 
       {isGroupsLoading && (
-        <div className="text-center py-8 text-gray-400">Loading\u2026</div>
-      )}
-
-      {data && (
-        <div className={`bg-white rounded-lg shadow overflow-hidden transition-opacity ${isPlaceholderData ? "opacity-60" : ""}`}>
-          <div className="px-4 py-2 bg-gray-50 border-b text-sm text-gray-500">
-            共 {data.total} 个交易组
+        <div className="bg-surface rounded-lg border border-[--color-border] p-8">
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 bg-elevated animate-pulse rounded" />
+            ))}
           </div>
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    const sorted = header.column.getIsSorted();
-                    const ariaSortValue = sorted === "asc" ? "ascending" as const : sorted === "desc" ? "descending" as const : "none" as const;
-                    return (
-                    <th
-                      key={header.id}
-                      onClick={header.column.getToggleSortingHandler()}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } }}
-                      tabIndex={0}
-                      role="columnheader"
-                      aria-sort={ariaSortValue}
-                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-                    >
-                      <div className="flex items-center gap-1">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        <span className="text-gray-400">
-                          {{ asc: "↑", desc: "↓" }[
-                            header.column.getIsSorted() as string
-                          ] ?? "⇅"}
-                        </span>
-                      </div>
-                    </th>
-                    );
-                  })}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedGroupId(row.original.id)}
-                  onMouseEnter={preloadChart}
-                  tabIndex={0}
-                  role="button"
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(row.original.id); } }}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-4 py-2 whitespace-nowrap"
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {table.getRowModel().rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={columns.length}
-                    className="px-4 py-8 text-center text-gray-400"
-                  >
-                    No trade groups found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       )}
 
-      {data && data.total > (data.per_page ?? 50) && (
-        <div className="flex items-center justify-between">
+      {data && (
+        <div className={`bg-surface rounded-lg border border-[--color-border] overflow-hidden transition-opacity ${isPlaceholderData ? "opacity-60" : ""}`}>
+          <div className="px-4 py-2.5 border-b border-[--color-border] flex items-center justify-between">
+            <span className="text-xs text-[--color-text-muted] uppercase tracking-wider font-medium">
+              {data.total} groups
+            </span>
+            {totalPages > 1 && (
+              <span className="text-xs text-[--color-text-muted] font-mono">
+                {page} / {totalPages}
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm" style={{ tableLayout: "fixed" }}>
+              <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id} className="border-b border-[--color-border]">
+                    {headerGroup.headers.map((header) => {
+                      const sorted = header.column.getIsSorted();
+                      const ariaSortValue = sorted === "asc" ? "ascending" as const : sorted === "desc" ? "descending" as const : "none" as const;
+                      return (
+                      <th
+                        key={header.id}
+                        onClick={header.column.getToggleSortingHandler()}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } }}
+                        tabIndex={0}
+                        role="columnheader"
+                        aria-sort={ariaSortValue}
+                        style={header.column.columnDef.size ? { width: header.column.getSize() } : undefined}
+                        className="px-4 py-2.5 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest cursor-pointer select-none hover:text-[--color-text-secondary] hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                      >
+                        <div className="flex items-center gap-1">
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                          <span className="text-[--color-text-muted]">
+                            {{ asc: "\u2191", desc: "\u2193" }[
+                              header.column.getIsSorted() as string
+                            ] ?? "\u21C5"}
+                          </span>
+                        </div>
+                      </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                {table.getRowModel().rows.map((row, rowIdx) => (
+                  <tr
+                    key={row.id}
+                    className={`table-row-hover border-b border-[--color-border] cursor-pointer transition-colors ${rowIdx % 2 === 1 ? "bg-[rgba(255,255,255,0.015)]" : ""}`}
+                    onClick={() => setSelectedGroupId(row.original.id)}
+                    onMouseEnter={preloadChart}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(row.original.id); } }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className="px-4 py-2.5 whitespace-nowrap text-[--color-text-secondary]"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {table.getRowModel().rows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={columns.length}
+                      className="px-4 py-12 text-center"
+                    >
+                      <div className="flex flex-col items-center gap-2">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+                          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+                          <polyline points="13 2 13 9 20 9" />
+                        </svg>
+                        <p className="text-[--color-text-muted] text-sm">No trade groups found</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+            className="px-3 py-1.5 text-sm border border-[--color-border] rounded-lg text-[--color-text-secondary] disabled:opacity-30 hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
-            上一页
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block"><path d="M10 12L6 8l4-4"/></svg>
           </button>
-          <span className="text-sm text-gray-500">
-            第 {page} / {Math.ceil(data.total / (data.per_page ?? 50))} 页
+          <span className="text-xs text-[--color-text-muted] font-mono min-w-[60px] text-center">
+            {page} / {totalPages}
           </span>
           <button
-            disabled={page >= Math.ceil(data.total / (data.per_page ?? 50))}
+            disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+            className="px-3 py-1.5 text-sm border border-[--color-border] rounded-lg text-[--color-text-secondary] disabled:opacity-30 hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
-            下一页
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block"><path d="M6 4l4 4-4 4"/></svg>
           </button>
         </div>
       )}
 
       {selectedGroupId && (
-        <Suspense fallback={<div className="text-sm text-gray-400">Loading chart\u2026</div>}>
+        <Suspense fallback={null}>
           <TradeChartModal
             groupId={selectedGroupId}
             onClose={() => setSelectedGroupId(null)}

@@ -9,11 +9,11 @@ import { useAssetClassFilter } from "../hooks/useAssetClassFilter";
 
 const Stat = memo(function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   const colorClass =
-    color === "green" ? "text-green-600" : color === "red" ? "text-red-600" : "text-gray-900";
+    color === "green" ? "text-profit" : color === "red" ? "text-loss" : "text-[--color-text-primary]";
   return (
-    <div>
-      <span className="text-gray-500 block">{label}</span>
-      <span className={`text-lg font-semibold ${colorClass}`} style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
+    <div className="py-2">
+      <span className="text-[--color-text-muted] block text-[10px] uppercase tracking-widest mb-1">{label}</span>
+      <span className={`text-lg font-semibold font-mono ${colorClass}`} style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
     </div>
   );
 });
@@ -28,7 +28,7 @@ export default function AnalyticsPage() {
     isInitialized,
   } = useAssetClassFilter("analytics_asset_class_filter");
 
-  const { data: metrics } = useQuery({
+  const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ["performance", { from: dateRange.from, to: dateRange.to, assetClasses: assetClassesParam }],
     queryFn: () => fetchPerformance(dateRange.from, dateRange.to, assetClassesParam),
     enabled: isInitialized,
@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
         value: fmtCurrency.format(Number(metrics.net_pnl)),
         color: Number(metrics.net_pnl) >= 0 ? "green" : "red",
       },
-      { label: "Total Trades", value: String(metrics.total_trades) },
+      { label: "Total Trades", value: new Intl.NumberFormat().format(metrics.total_trades) },
       {
         label: "Win Rate",
         value: `${metrics.win_rate}%`,
@@ -87,9 +87,9 @@ export default function AnalyticsPage() {
   }, [metrics]);
 
   return (
-    <div className="space-y-6">
+    <div className="stagger-in space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-semibold">Analytics</h1>
+        <h1 className="font-display text-3xl text-[--color-text-primary] tracking-tight">Analytics</h1>
         <div className="flex flex-wrap items-center gap-3">
           <AssetClassFilter
             availableAssetClasses={availableAssetClasses}
@@ -101,10 +101,18 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Performance Stats */}
-      {metrics && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium mb-4">Performance Metrics</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
+      {metricsLoading ? (
+        <div className="bg-surface rounded-lg border border-[--color-border] p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-14 bg-elevated animate-pulse rounded" />
+            ))}
+          </div>
+        </div>
+      ) : metrics ? (
+        <div className="bg-surface rounded-lg border border-[--color-border] p-6">
+          <h2 className="text-[10px] font-medium text-[--color-text-muted] mb-4 uppercase tracking-widest">Performance Metrics</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-sm">
             {stats.map((stat) => (
               <Stat
                 key={stat.label}
@@ -115,18 +123,20 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Equity Curve */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">Equity Curve</h2>
-        {dailyData && <EquityCurve data={dailyData} />}
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Equity Curve */}
+        <div className="bg-surface rounded-lg border border-[--color-border] p-5">
+          <h2 className="text-[10px] font-medium text-[--color-text-muted] mb-3 uppercase tracking-widest">Equity Curve</h2>
+          {dailyData && <EquityCurve data={dailyData} />}
+        </div>
 
-      {/* Symbol Breakdown */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">P&L by Symbol</h2>
-        {symbols && <SymbolBreakdown data={symbols} />}
+        {/* Symbol Breakdown */}
+        <div className="bg-surface rounded-lg border border-[--color-border] p-5">
+          <h2 className="text-[10px] font-medium text-[--color-text-muted] mb-3 uppercase tracking-widest">P&L by Symbol</h2>
+          {symbols && <SymbolBreakdown data={symbols} />}
+        </div>
       </div>
     </div>
   );
