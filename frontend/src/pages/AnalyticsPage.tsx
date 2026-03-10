@@ -13,7 +13,7 @@ const Stat = memo(function Stat({ label, value, color }: { label: string; value:
   return (
     <div>
       <span className="text-gray-500 block">{label}</span>
-      <span className={`text-lg font-semibold ${colorClass}`}>{value}</span>
+      <span className={`text-lg font-semibold ${colorClass}`} style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
     </div>
   );
 });
@@ -49,10 +49,12 @@ export default function AnalyticsPage() {
   const stats = useMemo(() => {
     if (!metrics) return [];
 
+    const fmtCurrency = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
+
     return [
       {
         label: "Net P&L",
-        value: `$${Number(metrics.net_pnl).toFixed(2)}`,
+        value: fmtCurrency.format(Number(metrics.net_pnl)),
         color: Number(metrics.net_pnl) >= 0 ? "green" : "red",
       },
       { label: "Total Trades", value: String(metrics.total_trades) },
@@ -67,17 +69,17 @@ export default function AnalyticsPage() {
       },
       {
         label: "Avg Win",
-        value: `$${Number(metrics.avg_win).toFixed(2)}`,
+        value: fmtCurrency.format(Number(metrics.avg_win)),
         color: "green",
       },
       {
         label: "Avg Loss",
-        value: `$${Number(metrics.avg_loss).toFixed(2)}`,
+        value: fmtCurrency.format(Number(metrics.avg_loss)),
         color: "red",
       },
       {
         label: "Expectancy",
-        value: `$${Number(metrics.expectancy).toFixed(2)}`,
+        value: fmtCurrency.format(Number(metrics.expectancy)),
         color: Number(metrics.expectancy) >= 0 ? "green" : "red",
       },
       { label: "Trading Days", value: String(metrics.trading_days) },

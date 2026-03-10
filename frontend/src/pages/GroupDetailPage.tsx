@@ -11,7 +11,7 @@ export default function GroupDetailPage() {
     enabled: Boolean(id),
   });
 
-  if (isLoading) return <div className="text-gray-400">Loading group...</div>;
+  if (isLoading) return <div className="text-gray-400">Loading group\u2026</div>;
   if (error) return <div className="text-red-500">Error: {(error as Error).message}</div>;
   if (!data) return <div className="text-gray-400">Group not found.</div>;
 

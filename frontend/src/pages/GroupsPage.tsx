@@ -133,7 +133,7 @@ export default function GroupsPage() {
           if (val === null) return <span className="text-gray-400">-</span>;
           const num = Number(val);
           return (
-            <span className={num >= 0 ? "text-green-600" : "text-red-600"}>
+            <span className={num >= 0 ? "text-green-600" : "text-red-600"} style={{ fontVariantNumeric: "tabular-nums" }}>
               ${num.toFixed(2)}
             </span>
           );
@@ -184,6 +184,7 @@ export default function GroupsPage() {
             onChange={handleAssetClassChange}
           />
           <select
+            aria-label="Filter by status"
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
             value={statusFilter}
             onChange={(e) => {
@@ -200,13 +201,13 @@ export default function GroupsPage() {
             disabled={recomputeMutation.isPending}
             className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
           >
-            {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
+            {recomputeMutation.isPending ? "Recomputing\u2026" : "Recompute"}
           </button>
         </div>
       </div>
 
       {isGroupsLoading && (
-        <div className="text-center py-8 text-gray-400">Loading...</div>
+        <div className="text-center py-8 text-gray-400">Loading\u2026</div>
       )}
 
       {data && (
@@ -218,11 +219,18 @@ export default function GroupsPage() {
             <thead className="bg-gray-50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
+                  {headerGroup.headers.map((header) => {
+                    const sorted = header.column.getIsSorted();
+                    const ariaSortValue = sorted === "asc" ? "ascending" as const : sorted === "desc" ? "descending" as const : "none" as const;
+                    return (
                     <th
                       key={header.id}
                       onClick={header.column.getToggleSortingHandler()}
-                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100"
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } }}
+                      tabIndex={0}
+                      role="columnheader"
+                      aria-sort={ariaSortValue}
+                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                     >
                       <div className="flex items-center gap-1">
                         {flexRender(
@@ -236,7 +244,8 @@ export default function GroupsPage() {
                         </span>
                       </div>
                     </th>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
@@ -247,6 +256,9 @@ export default function GroupsPage() {
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedGroupId(row.original.id)}
                   onMouseEnter={preloadChart}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(row.original.id); } }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
@@ -281,7 +293,7 @@ export default function GroupsPage() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
             上一页
           </button>
@@ -291,7 +303,7 @@ export default function GroupsPage() {
           <button
             disabled={page >= Math.ceil(data.total / (data.per_page ?? 50))}
             onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
             下一页
           </button>
@@ -299,7 +311,7 @@ export default function GroupsPage() {
       )}
 
       {selectedGroupId && (
-        <Suspense fallback={<div className="text-sm text-gray-400">Loading chart...</div>}>
+        <Suspense fallback={<div className="text-sm text-gray-400">Loading chart\u2026</div>}>
           <TradeChartModal
             groupId={selectedGroupId}
             onClose={() => setSelectedGroupId(null)}

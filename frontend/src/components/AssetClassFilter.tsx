@@ -109,7 +109,10 @@ export default function AssetClassFilter({
       {/* 触发按钮 */}
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Filter by asset class"
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none
           ${
             isAllSelected || isNoneSelected
               ? "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
@@ -122,6 +125,7 @@ export default function AssetClassFilter({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -136,6 +140,7 @@ export default function AssetClassFilter({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -148,12 +153,15 @@ export default function AssetClassFilter({
 
       {/* 下拉面板 */}
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+        <div
+          className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
+          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+        >
           {/* 全选/清除按钮 */}
           <div className="flex gap-2 px-3 py-2 border-b border-gray-100">
             <button
               onClick={handleSelectAll}
-              className={`text-xs px-2 py-0.5 rounded transition-colors ${
+              className={`text-xs px-2 py-0.5 rounded transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
                 isAllSelected
                   ? "bg-blue-100 text-blue-700"
                   : "text-blue-600 hover:bg-blue-50"
@@ -163,7 +171,7 @@ export default function AssetClassFilter({
             </button>
             <button
               onClick={handleClearAll}
-              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded hover:bg-gray-50 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-0.5 rounded hover:bg-gray-50 transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               Clear
             </button>

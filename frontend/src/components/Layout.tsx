@@ -14,9 +14,15 @@ export default function Layout() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
-            <NavLink to="/" className="text-lg font-semibold text-gray-900">
+            <NavLink to="/" className="text-lg font-semibold text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 focus-visible:outline-none rounded">
               Trading Records
             </NavLink>
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-white focus:text-blue-600"
+            >
+              Skip to main content
+            </a>
             <nav className="flex space-x-1">
               {navItems.map((item) => (
                 <NavLink
@@ -24,7 +30,7 @@ export default function Layout() {
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                      "px-3 py-2 rounded-md text-sm font-medium transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 focus-visible:outline-none",
                       isActive
                         ? "bg-gray-100 text-gray-900"
                         : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
@@ -39,7 +45,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
+      <main id="main-content" className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
         <Outlet />
       </main>
 

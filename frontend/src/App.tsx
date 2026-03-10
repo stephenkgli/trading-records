@@ -10,7 +10,7 @@ const ImportPage = lazy(() => import("./pages/ImportPage"));
 
 function App() {
   return (
-    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading page...</div>}>
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading page\u2026</div>}>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<DashboardPage />} />

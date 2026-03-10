@@ -97,7 +97,7 @@ export default function DateRangeSelector({ value, onChange }: Props) {
           <button
             key={key}
             onClick={() => handlePresetClick(key)}
-            className={`px-3 py-1.5 text-xs font-medium transition-colors
+            className={`px-3 py-1.5 text-xs font-medium transition-[color,background-color] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none
               ${
                 activePreset === key
                   ? "bg-blue-600 text-white"
@@ -115,16 +115,22 @@ export default function DateRangeSelector({ value, onChange }: Props) {
         <div className="flex items-center gap-2">
           <input
             type="date"
+            name="date-from"
+            autoComplete="off"
+            aria-label="Start date"
             value={value.from ?? ""}
             onChange={handleFromChange}
-            className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="border border-gray-300 rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
           />
           <span className="text-gray-400 text-xs">to</span>
           <input
             type="date"
+            name="date-to"
+            autoComplete="off"
+            aria-label="End date"
             value={value.to ?? ""}
             onChange={handleToChange}
-            className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="border border-gray-300 rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
           />
         </div>
       )}

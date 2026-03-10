@@ -37,7 +37,7 @@ export default function EquityCurve({ data }: EquityCurveProps) {
         <XAxis dataKey="date" tick={{ fontSize: 11 }} />
         <YAxis tick={{ fontSize: 11 }} />
         <Tooltip
-          formatter={(value: number) => [`$${value.toFixed(2)}`, "Cumulative P&L"]}
+          formatter={(value: number) => [new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value), "Cumulative P&L"]}
         />
         <Line
           type="monotone"

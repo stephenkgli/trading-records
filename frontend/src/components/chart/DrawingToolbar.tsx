@@ -158,7 +158,7 @@ export default function DrawingToolbar({
               type="button"
               disabled={isDisabled}
               onClick={() => handleToolClick(tool.overlayName)}
-              className={`px-2.5 py-1.5 text-xs rounded transition-all ${
+              className={`px-2.5 py-1.5 text-xs rounded transition-[color,background-color,border-color,transform,box-shadow] ${
                 activeTool === tool.overlayName
                   ? "bg-blue-600 text-white border-l-2 border-blue-400 shadow-sm"
                   : "bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm"
@@ -189,6 +189,7 @@ export default function DrawingToolbar({
                   : "border-gray-500 hover:ring-2 hover:ring-blue-400 hover:ring-offset-1 hover:ring-offset-gray-800"
               }`}
               style={{ backgroundColor: color }}
+              aria-label={`Color: ${color}`}
               title={`Color: ${color}`}
             />
           ))}
@@ -205,6 +206,7 @@ export default function DrawingToolbar({
                   ? "ring-2 ring-offset-1 ring-blue-400 ring-offset-gray-800 bg-gray-600"
                   : "bg-gray-700 border border-gray-600 hover:bg-gray-600"
               }`}
+              aria-label={`Line width: ${w}px`}
               title={`Line width: ${w}px`}
             >
               <div
@@ -223,7 +225,7 @@ export default function DrawingToolbar({
         type="button"
         disabled={isDisabled || !hasSelection}
         onClick={handleDeleteSelected}
-        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
       >
         删除选中
       </button>
@@ -232,7 +234,7 @@ export default function DrawingToolbar({
         type="button"
         disabled={isDisabled}
         onClick={handleClearAll}
-        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-red-400 border border-red-500/40 hover:bg-red-900/30 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-red-400 border border-red-500/40 hover:bg-red-900/30 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
       >
         清除全部
       </button>

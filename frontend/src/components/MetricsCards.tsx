@@ -10,10 +10,7 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
     () => [
       {
         label: "Net P&L",
-        value: `$${Number(metrics.net_pnl).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`,
+        value: new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(metrics.net_pnl)),
         color: Number(metrics.net_pnl) >= 0 ? "text-green-600" : "text-red-600",
       },
       {
@@ -43,7 +40,7 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
       {cards.map((card) => (
         <div key={card.label} className="bg-white rounded-lg shadow p-4">
           <p className="text-sm text-gray-500">{card.label}</p>
-          <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+          <p className={`text-2xl font-bold ${card.color}`} style={{ fontVariantNumeric: "tabular-nums" }}>{card.value}</p>
         </div>
       ))}
     </div>

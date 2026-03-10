@@ -61,9 +61,13 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
   const chartRef = useRef(chart);
   chartRef.current = chart;
 
-  /** Handle Delete/Backspace key to remove selected overlay. */
+  /** Handle Delete/Backspace key to remove selected overlay, Escape to close. */
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
         selectedOverlayIdRef.current &&
@@ -78,7 +82,7 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [onClose]);
 
   /** Save overlays after style change (not captured by overlay event callbacks). */
   const handleStyleChange = useCallback(() => {
@@ -90,17 +94,21 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Trade chart"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fadeIn"
       onClick={onClose}
     >
       <div
         className="bg-[#1e1e2f] rounded-lg shadow-2xl max-w-[920px] w-[95vw] max-h-[90vh] overflow-hidden animate-scaleIn"
+        style={{ overscrollBehavior: "contain" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-gray-100">
-              {data?.symbol ?? "Loading..."}
+              {data?.symbol ?? "Loading\u2026"}
             </h2>
             {data?.group && (
               <>
@@ -123,7 +131,8 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors text-xl leading-none"
+            aria-label="Close"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-[color,background-color] text-xl leading-none"
           >
             &times;
           </button>

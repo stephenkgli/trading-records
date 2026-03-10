@@ -39,7 +39,7 @@ export default function SymbolBreakdown({ data }: SymbolBreakdownProps) {
         <XAxis type="number" tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11 }} width={55} />
         <Tooltip
-          formatter={(value: number) => [`$${value.toFixed(2)}`, "Net P&L"]}
+          formatter={(value: number) => [new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value), "Net P&L"]}
         />
         <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
           {chartData.map((entry, index) => (

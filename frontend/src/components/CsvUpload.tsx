@@ -58,6 +58,7 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
       >
         <input
           type="file"
+          name="csv-files"
           accept=".csv,.xlsx"
           onChange={handleChange}
           className="hidden"
@@ -69,7 +70,7 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
           <p className="text-gray-600">
             {selectedFiles.length > 0
               ? `Selected ${selectedFiles.length} file(s)`
-              : "Drag and drop CSV files here, or click to browse"}
+              : "Drag and drop CSV files here, or click to browse\u2026"}
           </p>
           <p className="text-xs text-gray-400 mt-1">
             Supports IBKR Activity Statement CSV, Tradovate CSV exports, and
@@ -82,9 +83,9 @@ export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
         <button
           onClick={handleSubmit}
           disabled={isLoading}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity]"
         >
-          {isLoading ? "Importing..." : `Import ${selectedFiles.length} file(s)`}
+          {isLoading ? "Importing\u2026" : `Import ${selectedFiles.length} file(s)`}
         </button>
       )}
     </div>

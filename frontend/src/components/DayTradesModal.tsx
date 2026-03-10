@@ -48,10 +48,15 @@ export default function DayTradesModal({ date, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Day trades"
       onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
     >
       <div
         className="bg-[#1e1e2f] rounded-lg shadow-2xl max-w-[720px] w-[95vw] max-h-[90vh] overflow-hidden animate-scaleIn"
+        style={{ overscrollBehavior: "contain" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
@@ -67,6 +72,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                     className={`text-sm font-medium ${
                       totalPnl >= 0 ? "text-green-400" : "text-red-400"
                     }`}
+                    style={{ fontVariantNumeric: "tabular-nums" }}
                   >
                     P&L: {totalPnl >= 0 ? "+" : ""}
                     {totalPnl.toFixed(2)}
@@ -77,7 +83,8 @@ export default function DayTradesModal({ date, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors text-xl leading-none"
+            aria-label="Close"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-[color,background-color] text-xl leading-none"
           >
             &times;
           </button>
@@ -85,8 +92,8 @@ export default function DayTradesModal({ date, onClose }: Props) {
 
         <div className="p-4 bg-[#1a1a2e] overflow-y-auto max-h-[calc(90vh-64px)]">
           {isLoading && (
-            <div className="flex items-center justify-center h-32 text-gray-400">
-              Loading...
+            <div className="flex items-center justify-center h-32 text-gray-400" aria-live="polite">
+              Loading\u2026
             </div>
           )}
           {error && (
@@ -112,6 +119,9 @@ export default function DayTradesModal({ date, onClose }: Props) {
                       className="border-b border-gray-700/50 hover:bg-gray-800/30 cursor-pointer"
                       onClick={() => setSelectedGroupId(g.id)}
                       onMouseEnter={preloadChart}
+                      tabIndex={0}
+                      role="button"
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(g.id); } }}
                     >
                       <td className="py-2 px-3 text-gray-100 font-medium">
                         {g.symbol}
@@ -146,6 +156,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                               ? "text-green-400"
                               : "text-red-400"
                         }`}
+                        style={{ fontVariantNumeric: "tabular-nums" }}
                       >
                         {isClosed
                           ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`
