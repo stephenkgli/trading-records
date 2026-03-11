@@ -73,6 +73,13 @@ const PRESET_COLORS = [
 /** Preset line widths. */
 const LINE_WIDTHS = [1, 2, 3, 4] as const;
 
+/** Shared class fragments to avoid duplication across toolbar buttons. */
+const BTN_BASE =
+  "px-2.5 py-1.5 text-xs rounded transition-[color,background-color,border-color,transform,box-shadow] disabled:opacity-40 disabled:cursor-not-allowed";
+const BTN_SECONDARY =
+  "bg-elevated text-t-primary border border-border-strong hover:bg-surface-hover hover:-translate-y-px hover:shadow-sm";
+const DIVIDER = "w-px h-5 bg-border-strong mx-1";
+
 interface DrawingToolbarProps {
   chart: Chart | null;
   /** Currently selected overlay ID (set by parent via onSelected callback). */
@@ -98,7 +105,7 @@ export default function DrawingToolbar({
   const [activeLineWidth, setActiveLineWidth] = useState<number | null>(null);
 
   function handleToolClick(overlayName: string) {
-    if (!chart || isDisabled) return;
+    if (!chart) return;
 
     if (activeTool === overlayName) {
       setActiveTool(null);
@@ -133,13 +140,13 @@ export default function DrawingToolbar({
   }
 
   function handleDeleteSelected() {
-    if (!chart || isDisabled || !selectedOverlayId) return;
+    if (!chart || !selectedOverlayId) return;
     chart.removeOverlay({ id: selectedOverlayId });
     onDeleteSelected?.();
   }
 
   function handleClearAll() {
-    if (!chart || isDisabled) return;
+    if (!chart) return;
     chart.removeOverlay({ groupId: "user-drawings" });
     setActiveTool(null);
     onClearAll?.();
@@ -148,7 +155,7 @@ export default function DrawingToolbar({
   const hasSelection = !!selectedOverlayId;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-gray-700 bg-gray-800/90 backdrop-blur-sm">
+    <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-surface/90 backdrop-blur-sm">
       {/* Drawing tools — grouped with dividers */}
       {TOOL_GROUPS.map((group, gi) => (
         <div key={gi} className="flex items-center gap-1">
@@ -158,22 +165,22 @@ export default function DrawingToolbar({
               type="button"
               disabled={isDisabled}
               onClick={() => handleToolClick(tool.overlayName)}
-              className={`px-2.5 py-1.5 text-xs rounded transition-[color,background-color,border-color,transform,box-shadow] ${
+              className={`${BTN_BASE} ${
                 activeTool === tool.overlayName
-                  ? "bg-blue-600 text-white border-l-2 border-blue-400 shadow-sm"
-                  : "bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm"
-              } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  ? "bg-accent text-white border-l-2 border-accent-hover shadow-sm"
+                  : BTN_SECONDARY
+              }`}
             >
               {tool.label}
             </button>
           ))}
           {gi < TOOL_GROUPS.length - 1 && (
-            <div className="w-px h-5 bg-gray-600 mx-1" />
+            <div className={DIVIDER} />
           )}
         </div>
       ))}
 
-      <div className="w-px h-5 bg-gray-600 mx-1" />
+      <div className={DIVIDER} />
 
       {/* Style controls — visible when an overlay is selected */}
       {hasSelection && (
@@ -185,8 +192,8 @@ export default function DrawingToolbar({
               onClick={() => handleColorChange(color)}
               className={`w-6 h-6 rounded-full border transition-shadow ${
                 activeColor === color
-                  ? "ring-2 ring-offset-1 ring-blue-400 border-blue-400 ring-offset-gray-800"
-                  : "border-gray-500 hover:ring-2 hover:ring-blue-400 hover:ring-offset-1 hover:ring-offset-gray-800"
+                  ? "ring-2 ring-offset-1 ring-accent-hover border-accent-hover ring-offset-surface"
+                  : "border-border-strong hover:ring-2 hover:ring-accent-hover hover:ring-offset-1 hover:ring-offset-surface"
               }`}
               style={{ backgroundColor: color }}
               aria-label={`Color: ${color}`}
@@ -194,7 +201,7 @@ export default function DrawingToolbar({
             />
           ))}
 
-          <div className="w-px h-5 bg-gray-600 mx-1" />
+          <div className={DIVIDER} />
 
           {LINE_WIDTHS.map((w) => (
             <button
@@ -203,20 +210,20 @@ export default function DrawingToolbar({
               onClick={() => handleLineWidthChange(w)}
               className={`w-7 h-7 flex items-center justify-center rounded transition-shadow ${
                 activeLineWidth === w
-                  ? "ring-2 ring-offset-1 ring-blue-400 ring-offset-gray-800 bg-gray-600"
-                  : "bg-gray-700 border border-gray-600 hover:bg-gray-600"
+                  ? "ring-2 ring-offset-1 ring-accent-hover ring-offset-surface bg-surface-hover"
+                  : "bg-elevated border border-border-strong hover:bg-surface-hover"
               }`}
               aria-label={`Line width: ${w}px`}
               title={`Line width: ${w}px`}
             >
               <div
-                className="w-4 rounded-full bg-gray-200"
+                className="w-4 rounded-full bg-t-secondary"
                 style={{ height: `${w}px` }}
               />
             </button>
           ))}
 
-          <div className="w-px h-5 bg-gray-600 mx-1" />
+          <div className={DIVIDER} />
         </>
       )}
 
@@ -225,7 +232,7 @@ export default function DrawingToolbar({
         type="button"
         disabled={isDisabled || !hasSelection}
         onClick={handleDeleteSelected}
-        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-gray-200 border border-gray-600 hover:bg-gray-600 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
+        className={`${BTN_BASE} ${BTN_SECONDARY}`}
       >
         Delete
       </button>
@@ -234,7 +241,7 @@ export default function DrawingToolbar({
         type="button"
         disabled={isDisabled}
         onClick={handleClearAll}
-        className="px-2.5 py-1.5 text-xs rounded bg-gray-700 text-red-400 border border-red-500/40 hover:bg-red-900/30 hover:-translate-y-px hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-[color,background-color,border-color,transform,box-shadow]"
+        className={`${BTN_BASE} bg-elevated text-loss border border-loss/40 hover:bg-loss-subtle hover:-translate-y-px hover:shadow-sm`}
       >
         Clear All
       </button>
