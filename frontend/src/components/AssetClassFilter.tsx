@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useDropdownPortal } from "../hooks/useDropdownPortal";
 
 const ASSET_CLASS_LABELS: Record<string, string> = {
   stock: "Stock",
@@ -42,37 +43,7 @@ export default function AssetClassFilter({
   selectedAssetClasses,
   onChange,
 }: Props) {
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-
-  // Position dropdown below button when opened
-  useEffect(() => {
-    if (open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
-    }
-  }, [open]);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        buttonRef.current && !buttonRef.current.contains(target) &&
-        dropdownRef.current && !dropdownRef.current.contains(target)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  const dropdown = useDropdownPortal();
 
   const isAllSelected =
     availableAssetClasses.length > 0 &&
@@ -113,10 +84,10 @@ export default function AssetClassFilter({
   return (
     <div className="relative">
       <button
-        ref={buttonRef}
-        onClick={() => setOpen(!open)}
+        ref={dropdown.triggerRef}
+        onClick={dropdown.toggle}
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={dropdown.open}
         aria-label="Filter by asset class"
         className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none
           ${
@@ -142,7 +113,7 @@ export default function AssetClassFilter({
         </svg>
         {displayLabel}
         <svg
-          className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`w-3 h-3 transition-transform ${dropdown.open ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -157,12 +128,12 @@ export default function AssetClassFilter({
         </svg>
       </button>
 
-      {open && createPortal(
+      {dropdown.open && createPortal(
         <div
-          ref={dropdownRef}
+          ref={dropdown.dropdownRef}
           className="fixed w-56 bg-surface rounded-lg shadow-lg border border-[--color-border] z-[100] backdrop-blur-xl"
-          style={dropdownStyle}
-          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+          style={dropdown.dropdownStyle}
+          onKeyDown={(e) => { if (e.key === "Escape") dropdown.close(); }}
         >
           <div className="flex gap-2 px-3 py-2 border-b border-[--color-border]">
             <button

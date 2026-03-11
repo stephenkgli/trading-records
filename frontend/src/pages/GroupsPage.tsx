@@ -1,11 +1,11 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, lazy, Suspense } from "react";
+import { createPortal } from "react-dom";
 import {
   fetchGroups,
   recomputeGroups,
   type TradeGroup,
 } from "../api/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable,
   getCoreRowModel,
@@ -14,12 +14,19 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import AssetClassFilter from "../components/AssetClassFilter";
-import { formatDateTime } from "../utils/date";
 import { useAssetClassFilter } from "../hooks/useAssetClassFilter";
+import { useDropdownPortal } from "../hooks/useDropdownPortal";
+import { formatDateTime } from "../utils/date";
 
 const TradeChartModal = lazy(() => import("../components/TradeChartModal"));
 
 const preloadChart = () => void import("../components/TradeChartModal");
+
+const STATUS_OPTIONS = [
+  { value: "", label: "All Status" },
+  { value: "open", label: "Open" },
+  { value: "closed", label: "Closed" },
+] as const;
 
 type GroupsTableMeta = {
   pageOffset: number;
@@ -29,6 +36,8 @@ export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const statusDropdown = useDropdownPortal();
+
   const {
     availableAssetClasses,
     selectedAssetClasses,
@@ -200,19 +209,58 @@ export default function GroupsPage() {
             selectedAssetClasses={selectedAssetClasses ?? []}
             onChange={handleAssetClassChange}
           />
-          <select
-            aria-label="Filter by status"
-            className="bg-elevated border border-[--color-border] rounded-lg px-3 py-1.5 text-sm text-[--color-text-secondary] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All Status</option>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
-          </select>
+          <div className="relative">
+            <button
+              ref={statusDropdown.triggerRef}
+              onClick={statusDropdown.toggle}
+              aria-haspopup="listbox"
+              aria-expanded={statusDropdown.open}
+              aria-label="Filter by status"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                statusFilter
+                  ? "border-accent/40 bg-accent-subtle text-accent-hover hover:bg-accent/20"
+                  : "border-[--color-border] bg-elevated text-[--color-text-secondary] hover:bg-[--color-bg-hover]"
+              }`}
+            >
+              {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? "All Status"}
+              <svg
+                className={`w-3 h-3 transition-transform ${statusDropdown.open ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {statusDropdown.open && createPortal(
+              <div
+                ref={statusDropdown.dropdownRef}
+                className="fixed w-40 bg-surface rounded-lg shadow-lg border border-[--color-border] z-[100] backdrop-blur-xl py-1"
+                style={statusDropdown.dropdownStyle}
+                onKeyDown={(e) => { if (e.key === "Escape") statusDropdown.close(); }}
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setStatusFilter(opt.value);
+                      setPage(1);
+                      statusDropdown.close();
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                      statusFilter === opt.value
+                        ? "bg-accent-subtle text-accent-hover font-medium"
+                        : "text-[--color-text-secondary] hover:bg-[--color-bg-hover]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>,
+              document.body,
+            )}
+          </div>
           <button
             onClick={() => recomputeMutation.mutate()}
             disabled={recomputeMutation.isPending}
