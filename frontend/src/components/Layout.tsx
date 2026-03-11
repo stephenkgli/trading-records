@@ -23,9 +23,10 @@ export default function Layout() {
           <div className="flex items-center justify-between h-14">
             <NavLink
               to="/"
-              className="font-display text-xl text-[--color-text-primary] tracking-tight focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[--color-bg-surface] focus-visible:outline-none rounded"
+              className="font-display text-xl text-[--color-text-primary] tracking-tight shrink-0 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[--color-bg-surface] focus-visible:outline-none rounded"
             >
-              Trading Records
+              <span className="sm:hidden">TR</span>
+              <span className="hidden sm:inline">Trading Records</span>
             </NavLink>
             <nav className="flex items-center gap-1 overflow-x-auto -mr-4 pr-4 sm:mr-0 sm:pr-0">
               {navItems.map((item) => (
@@ -35,7 +36,7 @@ export default function Layout() {
                   end={item.end}
                   className={({ isActive }) =>
                     clsx(
-                      "px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none",
+                      "px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none",
                       isActive
                         ? "bg-accent/15 text-accent-hover"
                         : "text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-bg-hover]"

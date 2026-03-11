@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, lazy, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { fetchGroups, recomputeGroups } from "../api/endpoints/groups";
 import type { TradeGroup } from "../api/types";
@@ -18,6 +18,12 @@ import { formatDateTime } from "../utils/date";
 const TradeChartModal = lazy(() => import("../components/TradeChartModal"));
 
 const preloadChart = () => void import("../components/TradeChartModal");
+
+function ariaSortValue(sorted: false | "asc" | "desc"): "ascending" | "descending" | "none" {
+  if (sorted === "asc") return "ascending";
+  if (sorted === "desc") return "descending";
+  return "none";
+}
 
 const STATUS_OPTIONS = [
   { value: "", label: "All Status" },
@@ -46,10 +52,9 @@ export default function GroupsPage() {
     { id: "opened_at", desc: true },
   ]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
   const sortParam = sorting[0]?.id;
-  const orderParam: "asc" | "desc" | undefined = sorting[0]
-    ? (sorting[0].desc ? "desc" : "asc")
-    : undefined;
+  const orderParam = sorting[0]?.desc ? "desc" as const : sorting[0] ? "asc" as const : undefined;
 
   const { data, isLoading, isPlaceholderData } = useQuery({
     queryKey: [
@@ -75,8 +80,18 @@ export default function GroupsPage() {
     mutationFn: () => recomputeGroups(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      setFeedbackVisible(true);
+    },
+    onError: () => {
+      setFeedbackVisible(true);
     },
   });
+
+  useEffect(() => {
+    if (!feedbackVisible) return;
+    const timer = setTimeout(() => setFeedbackVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [feedbackVisible]);
 
   const perPage = data?.per_page ?? 50;
   const pageOffset = (page - 1) * perPage;
@@ -84,6 +99,11 @@ export default function GroupsPage() {
     setSelectedAssetClasses(acs);
     setPage(1);
   }, [setSelectedAssetClasses]);
+
+  const handleRecompute = useCallback(() => {
+    setFeedbackVisible(false);
+    recomputeMutation.mutate();
+  }, [recomputeMutation]);
 
   const columns = useMemo<ColumnDef<TradeGroup>[]>(
     () => [
@@ -173,7 +193,6 @@ export default function GroupsPage() {
           );
         },
       },
-
     ],
     []
   );
@@ -259,12 +278,22 @@ export default function GroupsPage() {
             )}
           </div>
           <button
-            onClick={() => recomputeMutation.mutate()}
+            onClick={handleRecompute}
             disabled={recomputeMutation.isPending}
             className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
             {recomputeMutation.isPending ? "Recomputing\u2026" : "Recompute"}
           </button>
+          {feedbackVisible && recomputeMutation.isSuccess && (
+            <span className="text-xs text-profit animate-fadeIn">
+              Done &mdash; {recomputeMutation.data?.groups_created ?? 0} created, {recomputeMutation.data?.groups_closed ?? 0} closed
+            </span>
+          )}
+          {feedbackVisible && recomputeMutation.isError && (
+            <span className="text-xs text-loss animate-fadeIn">
+              Failed to recompute
+            </span>
+          )}
         </div>
       </div>
 
@@ -298,15 +327,20 @@ export default function GroupsPage() {
                     {headerGroup.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       const sorted = header.column.getIsSorted();
-                      const ariaSortValue = sorted === "asc" ? "ascending" as const : sorted === "desc" ? "descending" as const : "none" as const;
+                      const sortLabel = ariaSortValue(sorted);
                       return (
                       <th
                         key={header.id}
                         onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
-                        onKeyDown={canSort ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } } : undefined}
+                        onKeyDown={canSort ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            header.column.getToggleSortingHandler()?.(e);
+                          }
+                        } : undefined}
                         tabIndex={canSort ? 0 : undefined}
                         role="columnheader"
-                        aria-sort={canSort ? ariaSortValue : undefined}
+                        aria-sort={canSort ? sortLabel : undefined}
                         style={header.column.columnDef.size ? { width: header.column.getSize() } : undefined}
                         className={`px-4 py-2.5 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest select-none transition-colors ${
                           canSort
@@ -342,7 +376,12 @@ export default function GroupsPage() {
                     onMouseEnter={preloadChart}
                     tabIndex={0}
                     role="button"
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(row.original.id); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedGroupId(row.original.id);
+                      }
+                    }}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td

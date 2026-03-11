@@ -12,6 +12,11 @@ interface Props {
   onClose: () => void;
 }
 
+function pnlColorClass(isClosed: boolean, pnl: number): string {
+  if (!isClosed) return "text-[--color-text-muted]";
+  return pnl >= 0 ? "text-profit" : "text-loss";
+}
+
 const ROLE_STYLES: Record<string, string> = {
   entry: "bg-profit-subtle text-profit",
   add: "bg-accent-subtle text-accent-hover",
@@ -64,8 +69,10 @@ export default function DayTradesModal({ date, onClose }: Props) {
   }, [onClose, selectedGroupId]);
 
   const groups = data?.groups ?? [];
-  const closedGroups = groups.filter((g) => g.status === "closed");
-  const totalPnl = closedGroups.reduce(
+  const exitedGroups = groups.filter(
+    (g) => g.status === "closed" && g.day_roles.includes("exit"),
+  );
+  const totalPnl = exitedGroups.reduce(
     (sum, g) => sum + (g.realized_pnl ? Number(g.realized_pnl) : 0),
     0,
   );
@@ -99,7 +106,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                 <span className="text-sm text-[--color-text-secondary]">
                   {groups.length} group{groups.length !== 1 ? "s" : ""}
                 </span>
-                {closedGroups.length > 0 && (
+                {exitedGroups.length > 0 && (
                   <span
                     className={`text-sm font-medium font-mono ${
                       totalPnl >= 0 ? "text-profit" : "text-loss"
@@ -153,7 +160,12 @@ export default function DayTradesModal({ date, onClose }: Props) {
                       onMouseEnter={preloadChart}
                       tabIndex={0}
                       role="button"
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedGroupId(g.id); } }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedGroupId(g.id);
+                        }
+                      }}
                     >
                       <td className="py-2 px-3 text-[--color-text-primary] font-medium">
                         {g.symbol}
@@ -181,13 +193,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                         </span>
                       </td>
                       <td
-                        className={`py-2 px-3 text-right font-medium font-mono ${
-                          !isClosed
-                            ? "text-[--color-text-muted]"
-                            : pnl >= 0
-                              ? "text-profit"
-                              : "text-loss"
-                        }`}
+                        className={`py-2 px-3 text-right font-medium font-mono ${pnlColorClass(isClosed, pnl)}`}
                         style={{ fontVariantNumeric: "tabular-nums" }}
                       >
                         {isClosed
