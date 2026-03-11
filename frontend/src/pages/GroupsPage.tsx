@@ -1,11 +1,8 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import {
-  fetchGroups,
-  recomputeGroups,
-  type TradeGroup,
-} from "../api/client";
+import { fetchGroups, recomputeGroups } from "../api/endpoints/groups";
+import type { TradeGroup } from "../api/types";
 import {
   useReactTable,
   getCoreRowModel,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAvailableAssetClasses } from "../api/client";
+import { fetchAvailableAssetClasses } from "../api/endpoints/analytics";
 
 function loadSavedSelection(storageKey: string): string[] | null {
   try {

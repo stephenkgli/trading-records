@@ -65,6 +65,7 @@ static/
 .codex/
 .codebuddy/
 .agents/
+dogfood-output/
 skills-lock.json
 
 # Docs

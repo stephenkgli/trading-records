@@ -2,20 +2,8 @@
  * Groups API endpoints.
  */
 
-import { getApiBase, getHeaders, handleResponse } from "./http";
+import { applyAssetClassParams, getApiBase, getHeaders, handleResponse } from "./http";
 import type { TradeGroupDetail, TradeGroupListResponse, GroupChartData, ActiveGroupsListResponse } from "../types";
-
-function applyAssetClassParams(
-  params: URLSearchParams,
-  assetClasses?: string[],
-): void {
-  if (assetClasses === undefined) return;
-  if (assetClasses.length > 0) {
-    params.set("asset_classes", assetClasses.join(","));
-  } else {
-    params.set("asset_classes", "");
-  }
-}
 
 export async function fetchGroups(
   page = 1,

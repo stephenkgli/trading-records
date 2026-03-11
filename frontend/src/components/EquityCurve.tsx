@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import type { DailySummary } from "../api/client";
+import type { DailySummary } from "../api/types";
 
 interface EquityCurveProps {
   data: DailySummary[];

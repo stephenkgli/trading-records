@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchPerformance, fetchDailySummaries } from "../api/client";
+import { fetchPerformance, fetchDailySummaries } from "../api/endpoints/analytics";
 import MetricsCards from "../components/MetricsCards";
 import EquityCurve from "../components/EquityCurve";
 import PnLCalendar from "../components/PnLCalendar";

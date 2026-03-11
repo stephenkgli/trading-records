@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { uploadCsv, fetchImportLogs, fetchGroups } from "./client";
+import { uploadCsv, fetchImportLogs } from "./endpoints/imports";
+import { fetchGroups } from "./endpoints/groups";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);

@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import type { SymbolBreakdown as SymbolData } from "../api/client";
+import type { SymbolBreakdown as SymbolData } from "../api/types";
 
 interface SymbolBreakdownProps {
   data: SymbolData[];

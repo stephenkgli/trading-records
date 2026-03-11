@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import { fetchCalendar, type CalendarEntry } from "../api/client";
+import { fetchCalendar } from "../api/endpoints/analytics";
+import type { CalendarEntry } from "../api/types";
 
 const DayTradesModal = lazy(() => import("./DayTradesModal"));
 

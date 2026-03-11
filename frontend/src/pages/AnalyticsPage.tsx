@@ -1,6 +1,6 @@
 import { useState, useMemo, memo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchBySymbol, fetchPerformance, fetchDailySummaries } from "../api/client";
+import { fetchBySymbol, fetchPerformance, fetchDailySummaries } from "../api/endpoints/analytics";
 import EquityCurve from "../components/EquityCurve";
 import SymbolBreakdown from "../components/SymbolBreakdown";
 import DateRangeSelector, { type DateRange } from "../components/DateRangeSelector";

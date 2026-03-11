@@ -29,13 +29,6 @@ export interface SymbolBreakdown {
   loss_count: number;
 }
 
-export interface StrategyBreakdown {
-  strategy_tag: string;
-  net_pnl: string;
-  trade_count: number;
-  group_count: number;
-}
-
 export interface PerformanceMetrics {
   total_pnl: string;
   total_commissions: string;

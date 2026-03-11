@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import CsvUpload from "../components/CsvUpload";
-import {
-  uploadCsv,
-  fetchImportLogs,
-  type BatchImportResponse,
-  type ImportLog,
-} from "../api/client";
+import { uploadCsv, fetchImportLogs } from "../api/endpoints/imports";
+import type { BatchImportResponse, ImportLog } from "../api/types";
 
 function getStatusBadgeClass(status: string): string {
   if (status === "success") return "bg-profit-subtle text-profit";

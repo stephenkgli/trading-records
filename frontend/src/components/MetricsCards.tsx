@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { PerformanceMetrics } from "../api/client";
+import type { PerformanceMetrics } from "../api/types";
 
 interface MetricsCardsProps {
   metrics: PerformanceMetrics;
@@ -42,19 +42,13 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {cards.map((card, i) => {
-        const colorClass =
-          card.sentiment === "profit"
-            ? "text-profit"
-            : card.sentiment === "loss"
-              ? "text-loss"
-              : "text-[--color-text-primary]";
+        let colorClass = "text-[--color-text-primary]";
+        if (card.sentiment === "profit") colorClass = "text-profit";
+        else if (card.sentiment === "loss") colorClass = "text-loss";
 
-        const glowClass =
-          card.hero && card.sentiment === "profit"
-            ? "card-glow-profit"
-            : card.hero && card.sentiment === "loss"
-              ? "card-glow-loss"
-              : "";
+        let glowClass = "";
+        if (card.hero && card.sentiment === "profit") glowClass = "card-glow-profit";
+        else if (card.hero && card.sentiment === "loss") glowClass = "card-glow-loss";
 
         return (
           <div

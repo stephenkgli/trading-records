@@ -15,7 +15,6 @@ export type {
   DailySummary,
   CalendarEntry,
   SymbolBreakdown,
-  StrategyBreakdown,
   PerformanceMetrics,
 } from "./analytics";
 
@@ -33,9 +32,3 @@ export type {
   GroupChartSummary,
   GroupChartData,
 } from "./groups";
-
-export type {
-  Trade,
-  TradeListResponse,
-  TradeFilters,
-} from "./trades";

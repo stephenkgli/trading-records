@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { fetchGroupDetail } from "../api/client";
+import { fetchGroupDetail } from "../api/endpoints/groups";
 import { formatDateTime } from "../utils/date";
 
 const ROLE_COLORS: Record<string, string> = {
