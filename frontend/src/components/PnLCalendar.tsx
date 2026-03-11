@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, lazy, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { fetchCalendar, type CalendarEntry } from "../api/client";
 
 const DayTradesModal = lazy(() => import("./DayTradesModal"));
@@ -116,7 +117,7 @@ export default function PnLCalendar() {
                 : { backgroundColor: "rgba(99, 102, 241, 0.15)" };
 
           const cellClassName = `rounded p-1 min-h-[40px] flex flex-col items-center justify-center transition-all duration-150 ${
-            hasActivity ? "cursor-pointer hover:ring-2 hover:ring-accent hover:brightness-110" : ""
+            hasActivity ? "cursor-pointer hover:ring-2 hover:ring-accent hover:brightness-110 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none" : ""
           }`;
           const cellTitle = hasData ? `$${pnl.toFixed(2)} (${cell.entry!.trade_count} trades)` : "";
           const cellChildren = (
@@ -158,13 +159,14 @@ export default function PnLCalendar() {
         })}
       </div>
 
-      {selectedDate && (
+      {selectedDate && createPortal(
         <Suspense fallback={null}>
           <DayTradesModal
             date={selectedDate}
             onClose={() => setSelectedDate(null)}
           />
-        </Suspense>
+        </Suspense>,
+        document.body,
       )}
     </div>
   );

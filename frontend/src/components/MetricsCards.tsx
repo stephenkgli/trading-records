@@ -10,7 +10,7 @@ export default function MetricsCards({ metrics }: MetricsCardsProps) {
     () => [
       {
         label: "Net P&L",
-        value: new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(metrics.net_pnl)),
+        value: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(metrics.net_pnl)),
         sentiment: Number(metrics.net_pnl) >= 0 ? "profit" : "loss",
         hero: true,
       },

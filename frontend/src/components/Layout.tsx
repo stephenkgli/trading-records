@@ -27,7 +27,7 @@ export default function Layout() {
             >
               Trading Records
             </NavLink>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-1 overflow-x-auto -mr-4 pr-4 sm:mr-0 sm:pr-0">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}

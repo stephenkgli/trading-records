@@ -36,18 +36,18 @@ export default function SymbolBreakdown({ data }: SymbolBreakdownProps) {
     <ResponsiveContainer width="100%" height={chartHeight}>
       <BarChart data={chartData} layout="vertical" margin={{ left: 60 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-        <XAxis type="number" tick={{ fontSize: 11, fill: "#8888a4" }} stroke="rgba(255,255,255,0.08)" />
-        <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11, fill: "#8888a4" }} width={55} stroke="rgba(255,255,255,0.08)" />
+        <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }} stroke="var(--color-border)" />
+        <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }} width={55} stroke="var(--color-border)" />
         <Tooltip
           contentStyle={{
-            backgroundColor: "#252540",
-            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border-strong)",
             borderRadius: "8px",
-            color: "#e4e4f0",
+            color: "var(--color-text-primary)",
             fontFamily: '"JetBrains Mono", monospace',
             fontSize: 12,
           }}
-          formatter={(value: number) => [new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value), "Net P&L"]}
+          formatter={(value: number) => [new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value), "Net P&L"]}
         />
         <Bar dataKey="pnl" radius={[0, 4, 4, 0]}>
           {chartData.map((entry, index) => (

@@ -34,18 +34,18 @@ export default function EquityCurve({ data }: EquityCurveProps) {
     <ResponsiveContainer width="100%" height={250}>
       <LineChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#8888a4" }} stroke="rgba(255,255,255,0.08)" />
-        <YAxis tick={{ fontSize: 11, fill: "#8888a4" }} stroke="rgba(255,255,255,0.08)" />
+        <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }} stroke="var(--color-border)" />
+        <YAxis tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }} stroke="var(--color-border)" />
         <Tooltip
           contentStyle={{
-            backgroundColor: "#252540",
-            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border-strong)",
             borderRadius: "8px",
-            color: "#e4e4f0",
+            color: "var(--color-text-primary)",
             fontFamily: '"JetBrains Mono", monospace',
             fontSize: 12,
           }}
-          formatter={(value: number) => [new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value), "Cumulative P&L"]}
+          formatter={(value: number) => [new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value), "Cumulative P&L"]}
         />
         <Line
           type="monotone"

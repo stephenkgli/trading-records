@@ -49,7 +49,7 @@ export default function AnalyticsPage() {
   const stats = useMemo(() => {
     if (!metrics) return [];
 
-    const fmtCurrency = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
+    const fmtCurrency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
     return [
       {

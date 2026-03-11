@@ -39,11 +39,11 @@ IMPORTANT: Every code change MUST go through以下完整流程，不得跳过任
 1. **Write code** - implement the change
 2. **Run tests** - ensure all tests pass
 3. **Verify locally** - validate the change actually works in the running dev environment:
-   - Frontend: use the `agent-browser` skill to open pages, click through UI, take screenshots, and visually confirm behavior
-   - Backend: call API endpoints directly (via `curl` or `httpx`) to verify response data
+   - Frontend: use the `agent-browser` cli to open pages, click through UI, take screenshots, and visually confirm behavior
+   - Backend: call API endpoints directly (via `curl`) to verify response data
    - Database: execute SQL queries against PostgreSQL to verify data integrity
 4. **If issues found** - fix and repeat from step 2 until no remaining issues
-5. **Optimize** - use the `code-simplifier` agent to review and optimize all changed code for clarity, consistency, and maintainability
+5. **Optimize** - use the `code-simplifier:code-simplifier` agent to review and optimize all changed code for clarity, consistency, and maintainability
 
 YOU MUST NOT consider a task complete until step 5 is done.
 

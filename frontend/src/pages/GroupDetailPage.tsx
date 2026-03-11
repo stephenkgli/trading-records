@@ -81,12 +81,12 @@ export default function GroupDetailPage() {
           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
             data.direction === "long" ? "bg-profit-subtle text-profit" : "bg-loss-subtle text-loss"
           }`}>
-            {data.direction.toUpperCase()}
+            {data.direction}
           </span>
           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
             data.status === "open" ? "bg-accent-subtle text-accent-hover" : "bg-elevated text-[--color-text-secondary]"
           }`}>
-            {data.status.toUpperCase()}
+            {data.status}
           </span>
         </div>
       </div>

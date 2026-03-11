@@ -118,7 +118,7 @@ export default function GroupsPage() {
                   : "bg-loss-subtle text-loss"
               }`}
             >
-              {dir.toUpperCase()}
+              {dir}
             </span>
           );
         },
@@ -264,7 +264,7 @@ export default function GroupsPage() {
           <button
             onClick={() => recomputeMutation.mutate()}
             disabled={recomputeMutation.isPending}
-            className="bg-accent text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+            className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
             {recomputeMutation.isPending ? "Recomputing\u2026" : "Recompute"}
           </button>
@@ -299,29 +299,36 @@ export default function GroupsPage() {
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id} className="border-b border-[--color-border]">
                     {headerGroup.headers.map((header) => {
+                      const canSort = header.column.getCanSort();
                       const sorted = header.column.getIsSorted();
                       const ariaSortValue = sorted === "asc" ? "ascending" as const : sorted === "desc" ? "descending" as const : "none" as const;
                       return (
                       <th
                         key={header.id}
-                        onClick={header.column.getToggleSortingHandler()}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } }}
-                        tabIndex={0}
+                        onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                        onKeyDown={canSort ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } } : undefined}
+                        tabIndex={canSort ? 0 : undefined}
                         role="columnheader"
-                        aria-sort={ariaSortValue}
+                        aria-sort={canSort ? ariaSortValue : undefined}
                         style={header.column.columnDef.size ? { width: header.column.getSize() } : undefined}
-                        className="px-4 py-2.5 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest cursor-pointer select-none hover:text-[--color-text-secondary] hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                        className={`px-4 py-2.5 text-left text-[10px] font-medium text-[--color-text-muted] uppercase tracking-widest select-none transition-colors ${
+                          canSort
+                            ? "cursor-pointer hover:text-[--color-text-secondary] hover:bg-[--color-bg-hover] focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+                            : ""
+                        }`}
                       >
                         <div className="flex items-center gap-1">
                           {flexRender(
                             header.column.columnDef.header,
                             header.getContext()
                           )}
-                          <span className="text-[--color-text-muted]">
-                            {{ asc: "\u2191", desc: "\u2193" }[
-                              header.column.getIsSorted() as string
-                            ] ?? "\u21C5"}
-                          </span>
+                          {canSort && (
+                            <span className="text-[--color-text-muted]">
+                              {{ asc: "\u2191", desc: "\u2193" }[
+                                header.column.getIsSorted() as string
+                              ] ?? "\u21C5"}
+                            </span>
+                          )}
                         </div>
                       </th>
                       );
@@ -380,9 +387,10 @@ export default function GroupsPage() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
+            aria-label="Previous page"
             className="px-3 py-1.5 text-sm border border-[--color-border] rounded-lg text-[--color-text-secondary] disabled:opacity-30 hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block"><path d="M10 12L6 8l4-4"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block" aria-hidden="true"><path d="M10 12L6 8l4-4"/></svg>
           </button>
           <span className="text-xs text-[--color-text-muted] font-mono min-w-[60px] text-center">
             {page} / {totalPages}
@@ -390,9 +398,10 @@ export default function GroupsPage() {
           <button
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
+            aria-label="Next page"
             className="px-3 py-1.5 text-sm border border-[--color-border] rounded-lg text-[--color-text-secondary] disabled:opacity-30 hover:bg-[--color-bg-hover] transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block"><path d="M6 4l4 4-4 4"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>
           </button>
         </div>
       )}

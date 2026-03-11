@@ -146,11 +146,13 @@ function ImportHistoryTable({ logs }: { logs: ImportLog[] }) {
 export default function ImportPage() {
   const queryClient = useQueryClient();
   const [lastResult, setLastResult] = useState<BatchImportResponse | null>(null);
+  const [successCount, setSuccessCount] = useState(0);
 
   const csvMutation = useMutation({
     mutationFn: uploadCsv,
     onSuccess: (result) => {
       setLastResult(result);
+      setSuccessCount((c) => c + 1);
       queryClient.invalidateQueries({ queryKey: ["importLogs"], exact: true });
     },
   });
@@ -169,6 +171,7 @@ export default function ImportPage() {
         <CsvUpload
           onUpload={(files) => csvMutation.mutate(files)}
           isLoading={csvMutation.isPending}
+          successCount={successCount}
         />
         {csvMutation.error && (
           <p className="mt-2 text-sm text-loss">

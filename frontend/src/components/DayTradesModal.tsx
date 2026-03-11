@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { fetchGroupsByActivityDate } from "../api/endpoints/groups";
 
@@ -40,11 +40,16 @@ export default function DayTradesModal({ date, onClose }: Props) {
     queryFn: () => fetchGroupsByActivityDate(date),
   });
 
-  // Focus trap: focus the dialog on mount
+  // Focus trap: focus the dialog on mount + lock body scroll
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
     dialogRef.current?.focus();
-    return () => { prev?.focus(); };
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      prev?.focus();
+    };
   }, []);
 
   // Escape key handler — only when chart modal is NOT open
@@ -65,6 +70,12 @@ export default function DayTradesModal({ date, onClose }: Props) {
     0,
   );
 
+  const handleBackdropClick = useCallback(() => {
+    if (!selectedGroupId) {
+      onClose();
+    }
+  }, [onClose, selectedGroupId]);
+
   return (
     <div
       ref={dialogRef}
@@ -73,7 +84,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
       aria-modal="true"
       aria-label={`Trades on ${date}`}
       tabIndex={-1}
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div
         className="bg-surface rounded-lg shadow-2xl max-w-[720px] w-[95vw] max-h-[90vh] overflow-hidden animate-scaleIn border border-[--color-border]"
@@ -155,7 +166,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                               : "bg-loss-subtle text-loss"
                           }`}
                         >
-                          {g.direction.toUpperCase()}
+                          {g.direction}
                         </span>
                       </td>
                       <td className="py-2 px-3">
@@ -166,7 +177,7 @@ export default function DayTradesModal({ date, onClose }: Props) {
                               : "bg-accent-subtle text-accent-hover"
                           }`}
                         >
-                          {g.status.toUpperCase()}
+                          {g.status}
                         </span>
                       </td>
                       <td

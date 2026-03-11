@@ -102,6 +102,15 @@ body {
   border-color: rgba(244, 63, 94, 0.2);
 }
 
+/* Dark theme for native date inputs */
+input[type="date"] {
+  color-scheme: dark;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
 /* Scrollbar styling for dark theme */
 ::-webkit-scrollbar {
   width: 6px;

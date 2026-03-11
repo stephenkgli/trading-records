@@ -1,13 +1,24 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 
 interface CsvUploadProps {
   onUpload: (files: File[]) => void;
   isLoading: boolean;
+  /** Incremented on each successful upload to trigger file list clearing. */
+  successCount?: number;
 }
 
-export default function CsvUpload({ onUpload, isLoading }: CsvUploadProps) {
+export default function CsvUpload({ onUpload, isLoading, successCount = 0 }: CsvUploadProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const prevSuccessCount = useRef(successCount);
+
+  // Clear selected files when successCount increments
+  useEffect(() => {
+    if (successCount > prevSuccessCount.current) {
+      setSelectedFiles([]);
+    }
+    prevSuccessCount.current = successCount;
+  }, [successCount]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();

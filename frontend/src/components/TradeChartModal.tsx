@@ -44,6 +44,19 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(
     null,
   );
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Focus management + scroll lock
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    dialogRef.current?.focus();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      prev?.focus();
+    };
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["groupChart", groupId],
@@ -95,9 +108,11 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Trade chart"
+      tabIndex={-1}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 animate-fadeIn backdrop-blur-sm"
       onClick={onClose}
     >
@@ -120,7 +135,7 @@ export default function TradeChartModal({ groupId, onClose }: Props) {
                       : "bg-loss-subtle text-loss"
                   }`}
                 >
-                  {data.group.direction.toUpperCase()}
+                  {data.group.direction}
                 </span>
                 {pnl && (
                   <span className={`text-sm font-medium font-mono ${pnl.className}`}>
