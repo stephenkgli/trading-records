@@ -28,6 +28,7 @@ uv.lock
 # Database
 *.db
 *.sqlite3
+pgdata/
 
 # OS
 .DS_Store

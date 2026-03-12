@@ -55,6 +55,7 @@ docker run -d \
   -e POSTGRES_USER=trading \
   -e POSTGRES_PASSWORD=trading \
   -e POSTGRES_DB=trading_records \
+  -v ./pgdata:/var/lib/postgresql/data \
   -p 5432:5432 \
   postgres:16-alpine
 ```
