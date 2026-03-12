@@ -280,7 +280,7 @@ export default function GroupsPage() {
           <button
             onClick={handleRecompute}
             disabled={recomputeMutation.isPending}
-            className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[--color-border] bg-elevated text-[--color-text-secondary] hover:bg-[--color-bg-hover] disabled:opacity-50 transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
           >
             {recomputeMutation.isPending ? "Recomputing\u2026" : "Recompute"}
           </button>

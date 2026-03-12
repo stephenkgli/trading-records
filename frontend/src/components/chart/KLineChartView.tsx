@@ -10,6 +10,7 @@ import { useRef, useEffect, useCallback } from "react";
 import {
   init,
   dispose,
+  registerOverlay,
   type Chart,
   type KLineData,
   type Period,
@@ -17,6 +18,95 @@ import {
 import type { CandleData, MarkerData } from "../../api/types";
 import { createTradeMarkers } from "./tradeMarkers";
 import { collectOverlays, save, load } from "./drawingStorage";
+
+/**
+ * Custom Fibonacci overlay: only 0%, 50%, 100% dashed lines.
+ * Prices shown on Y-axis instead of inline text labels.
+ */
+const FIB_PERCENTS = [1, 0.5, 0] as const;
+
+registerOverlay({
+  name: "fibonacciLine",
+  totalStep: 3,
+  needDefaultPointFigure: true,
+  needDefaultXAxisFigure: true,
+  needDefaultYAxisFigure: false,
+  createPointFigures: ({ coordinates, bounding, overlay }) => {
+    const points = overlay.points;
+    if (coordinates.length === 0) return [];
+
+    const lines: { coordinates: { x: number; y: number }[] }[] = [];
+    const endX = bounding.width;
+
+    if (
+      coordinates.length > 1 &&
+      typeof points[0].value === "number" &&
+      typeof points[1].value === "number"
+    ) {
+      const yDif = coordinates[0].y - coordinates[1].y;
+      const startX = Math.min(coordinates[0].x, coordinates[1].x);
+
+      FIB_PERCENTS.forEach((percent) => {
+        const y = coordinates[1].y + yDif * percent;
+        lines.push({ coordinates: [{ x: startX, y }, { x: endX, y }] });
+      });
+    }
+
+    return [
+      {
+        type: "line",
+        attrs: lines,
+        styles: { style: "dashed", dashedValue: [6, 4] },
+      },
+    ];
+  },
+  createYAxisFigures: ({ chart, overlay, coordinates, bounding, yAxis }) => {
+    const points = overlay.points;
+    if (
+      coordinates.length < 2 ||
+      typeof points[0].value !== "number" ||
+      typeof points[1].value !== "number"
+    ) {
+      return [];
+    }
+
+    let precision = 0;
+    if (yAxis?.isInCandle() ?? true) {
+      precision = chart.getSymbol()?.pricePrecision ?? 2;
+    } else {
+      const indicators = chart.getIndicators({ paneId: overlay.paneId });
+      indicators.forEach((ind) => {
+        precision = Math.max(precision, ind.precision);
+      });
+    }
+
+    const yDif = coordinates[0].y - coordinates[1].y;
+    const valueDif = points[0].value - points[1].value;
+    const isFromZero = yAxis?.isFromZero() ?? false;
+    const x = isFromZero ? 0 : bounding.width;
+    const textAlign = isFromZero ? "left" : "right";
+
+    return FIB_PERCENTS.map((percent) => {
+      const y = coordinates[1].y + yDif * percent;
+      const price = ((points[1].value ?? 0) + valueDif * percent).toFixed(
+        precision,
+      );
+      const text = chart
+        .getDecimalFold()
+        .format(chart.getThousandsSeparator().format(price));
+      return {
+        type: "text" as const,
+        attrs: {
+          x,
+          y,
+          text,
+          align: textAlign,
+          baseline: "middle",
+        },
+      };
+    });
+  },
+});
 
 interface KLineChartViewProps {
   candles: CandleData[];
@@ -181,6 +271,7 @@ export default function KLineChartView({
               size: 12,
             },
           },
+          priceMark: { last: { show: false } },
         },
         crosshair: {
           horizontal: {

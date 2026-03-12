@@ -27,28 +27,24 @@ const TOOL_GROUPS: readonly { readonly tools: readonly DrawingTool[] }[] = [
     tools: [
       { label: "Trend", overlayName: "segment" },
       { label: "Ray", overlayName: "rayLine" },
-      { label: "Line", overlayName: "straightLine" },
     ],
   },
   {
     // Guides
     tools: [
       { label: "H.Line", overlayName: "horizontalStraightLine" },
-      { label: "V.Line", overlayName: "verticalStraightLine" },
     ],
   },
   {
     // Channels
     tools: [
       { label: "Parallel", overlayName: "parallelStraightLine" },
-      { label: "Channel", overlayName: "priceChannelLine" },
     ],
   },
   {
     // Analysis
     tools: [
       { label: "Fibonacci", overlayName: "fibonacciLine" },
-      { label: "Price", overlayName: "priceLine" },
     ],
   },
 ] as const;
